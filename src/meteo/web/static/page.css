@@ -265,8 +265,19 @@ main { max-width: var(--contenu-l); margin: 0 auto; padding: 0 1.25rem;
   :root:not([data-menu="ferme"]) .page > main:first-child { padding-top: 1.9rem; }
 }
 
-.menu .marque { margin: 0; padding-right: 2.8rem; display: flex; flex-direction: column; }
-.menu .marque .nom { font-family: var(--serif); font-size: 1.55rem; line-height: 1.05; }
+/* Le signe et les mots en ligne ; les mots restent empilés entre eux. Tout est
+   tenu sous .menu parce que .marque sert aussi d'étiquette « ex aequo » sur la
+   page de fiabilité, plus bas dans cette feuille. Le signe est la seule chose du
+   menu qui porte l'accent : les icônes de rubrique restent au gris d'instrument,
+   et l'accent leur est réservé quand elles marquent la page courante. */
+.menu .marque { margin: 0; display: flex; align-items: center; gap: .62rem; }
+.menu .marque .signe { font-size: 2.1rem; color: var(--accent); flex: none; }
+.menu .marque .mots { display: flex; flex-direction: column; min-width: 0; }
+/* La place du bouton de fermeture se réserve sur le nom et non sur la marque
+   entière : le bouton n'est à hauteur que de la première ligne, et le sous-titre
+   a besoin de toute la largeur pour tenir sur une seule. */
+.menu .marque .nom { font-family: var(--serif); font-size: 1.55rem; line-height: 1.05;
+                     padding-right: 2.8rem; }
 .menu .marque .sous {
   margin-top: .3rem; font-size: .66rem; font-weight: 650; color: var(--discret);
   text-transform: uppercase; letter-spacing: .12em;
@@ -847,4 +858,13 @@ footer a { color: var(--encre-2); }
 @media (forced-colors: active) {
   .carte::before, .rail .point, .pastille { forced-color-adjust: none; }
   .ciel { color: CanvasText; background: Canvas; }
+}
+
+/* Ligne d'arrêt des séries longues, en pied de la page climat. Elle porte la
+   seule information que le menu latéral ne donne pas : la fraîcheur du lot
+   hebdomadaire, distincte de celle des verdicts horaires. */
+.mention.arret {
+  border-top: 1px solid var(--trait, rgba(128, 128, 128, .25));
+  padding-top: .9rem;
+  margin-top: .2rem;
 }

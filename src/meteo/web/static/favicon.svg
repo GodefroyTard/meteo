@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- Variante allégée de la marque (#i-marque dans _icones.html) pour l'onglet.
+       Trois choses tombent à 16 px, où le carré de 24 se rend sur seize pixels :
+       les deux Stations se referment sur le trait, et le versant annoncé, coudé
+       en deux segments, comble ses tirets jusqu'à redevenir plein. Il est donc
+       ramené à une seule diagonale portant deux tirets francs. Reste ce qui fait
+       la marque — le versant mesuré, la bascule, et le prolongement qui n'est
+       plus qu'annoncé. Le SVG porte sa propre couleur : hors du site il n'hérite
+       d'aucun currentColor, et l'onglet peut être clair comme sombre. -->
+  <style>
+    .filet {
+      fill: none; stroke: #58399f; stroke-width: 2;
+      stroke-linecap: round; stroke-linejoin: round;
+    }
+    .point { fill: #58399f; }
+    @media (prefers-color-scheme: dark) {
+      .filet { stroke: #ab8ded; }
+      .point { fill: #ab8ded; }
+    }
+  </style>
+  <path class="filet" d="M2.6 19.4 8.4 8.8l4 5"/>
+  <path class="filet" d="M13.4 14.6 21.4 6.4" stroke-dasharray="3.6 3"/>
+  <circle class="point" cx="12.6" cy="14.2" r="1.9"/>
+</svg>

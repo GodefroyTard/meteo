@@ -534,6 +534,11 @@ class DossierClimat:
     records: SerieRecords
     neige: SerieNeige | None
     secheresse: SerieSecheresse | None
+
+    dernier_jour: date | None
+    """Dernier jour mesuré par ce Poste, toutes grandeurs confondues. Il borne tous
+    les graphes de la page, et son écart à `derniere_journee_chargee` dit si le Poste
+    mesure encore ou s'il s'est tu."""
     """None quand le Poste n'a pas d'évapotranspiration exploitable — deux Postes sur
     trois en Isère. On préfère l'absence de section à une section approximative."""
 
@@ -699,6 +704,22 @@ def _gel(minima) -> SerieGel:
     )
 
 
+SILENCE_POSTE_J = 60
+"""Au-delà de cet écart avec la journée la plus récente du département, un Poste est
+tenu pour silencieux. Deux mois : assez pour absorber un retard de publication, assez
+peu pour ne pas laisser croire qu'un Poste éteint depuis des années mesure encore."""
+
+
+def derniere_journee_chargee() -> date | None:
+    """Le jour le plus récent présent dans les Séries longues, tous Postes confondus.
+
+    Sert de repère de fraîcheur : c'est lui qui avance quand le lot hebdomadaire
+    tourne, et qui se fige quand il tombe en panne.
+    """
+    with session() as s:
+        return s.execute(select(func.max(Journee.jour))).scalar_one_or_none()
+
+
 def _neige(hauteurs, fraiches) -> SerieNeige | None:
     """L'enneigement, ou rien si le Poste ne relève pas la hauteur de neige."""
     if not hauteurs:
@@ -776,7 +797,11 @@ def dossier(poste_numero: str, mois: int, jour: int) -> DossierClimat | None:
             s, poste_numero, poste.source_etp
         )
 
+    jours_mesures = (
+        minima.keys() | maxima.keys() | pluie.keys() | etp.keys() | hauteurs.keys()
+    )
     return DossierClimat(
+        dernier_jour=max(jours_mesures) if jours_mesures else None,
         poste=resume,
         jour=_serie_jour(resume, minima, maxima, mois, jour),
         cycle=_cycle(resume, minima, maxima),

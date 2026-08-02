@@ -6,6 +6,7 @@
 <title>{% block titre %}Météo{% endblock %} — quel modèle croire</title>
 <link rel="stylesheet" href="/static/page.css">
 <link rel="stylesheet" href="/static/viz.css">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <script>
   // Avant peinture, sinon le menu s'ouvre puis se referme sous les yeux à chaque
   // navigation. Sans préférence enregistrée, on laisse la feuille de style
@@ -28,8 +29,11 @@
 
 <aside class="menu" id="menu" aria-label="Navigation principale">
   <p class="marque">
-    <span class="nom">Météo</span>
-    <span class="sous">et quel modèle croire</span>
+    <svg class="icone signe" aria-hidden="true"><use href="#i-marque"></use></svg>
+    <span class="mots">
+      <span class="nom">Météo</span>
+      <span class="sous">et quel modèle croire</span>
+    </span>
   </p>
 
   <nav class="rubriques">

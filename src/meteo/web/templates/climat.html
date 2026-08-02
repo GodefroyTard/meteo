@@ -495,6 +495,14 @@
         qu'extrapolée — un hiver relevé à moitié afficherait mécaniquement moins de jours
         d'enneigement et dessinerait un recul là où il n'y a qu'un trou.
       </p>
+      {% set derniere_neige = (donnees_neige.saisons | last).saison %}
+      {% if dernier_jour_poste and dernier_jour_poste.year - derniere_neige > 2 %}
+        <p class="assise mention">
+          Attention : ce poste a cessé de relever la hauteur de neige après l'hiver
+          {{ (donnees_neige.saisons | last).libelle }}, alors qu'il mesure toujours la
+          température et la pluie. Ce graphe ne s'allongera plus.
+        </p>
+      {% endif %}
       <p class="assise mention">
         La neige varie bien plus que la température d'une année sur l'autre. En Isère,
         deux postes sur trois n'atteignent pas la significativité sur les jours
@@ -635,6 +643,31 @@
     </div>
   </section>
   {% endif %}
+  {% endif %}
+
+  {% if dernier_jour_poste %}
+  <section>
+    {# La fraîcheur du menu latéral est celle des verdicts, calculés toutes les heures.
+       Les séries longues suivent un tout autre rythme — un lot hebdomadaire — et rien
+       ne le disait. Sans cette ligne, une panne du lot climatologique resterait
+       invisible : les graphes continueraient d'afficher les mêmes années, sans que
+       personne puisse dire depuis quand. #}
+    <p class="assise mention arret">
+      {% set silencieux = derniere_journee
+             and (derniere_journee - dernier_jour_poste).days > silence_poste_j %}
+      {% if silencieux %}
+        Ce poste ne mesure plus : ses données s'arrêtent au
+        <strong>{{ dernier_jour_poste.strftime("%d/%m/%Y") }}</strong>. Le département,
+        lui, est à jour au {{ derniere_journee.strftime("%d/%m/%Y") }} — choisissez un
+        autre poste pour voir les années récentes.
+      {% else %}
+        Données Météo-France arrêtées au
+        <strong>{{ dernier_jour_poste.strftime("%d/%m/%Y") }}</strong>.
+        Elles sont rechargées chaque lundi ; la plupart des graphes n'avancent
+        cependant qu'une fois la période complète, donc une à quelques fois par an.
+      {% endif %}
+    </p>
+  </section>
   {% endif %}
 {% endblock %}
 
