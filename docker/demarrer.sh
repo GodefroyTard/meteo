@@ -8,6 +8,11 @@
 set -e
 printenv | grep -E '^(METEO_|PGPASSWORD=)' \
   | sed 's/^\([^=]*\)=\(.*\)$/export \1="\2"/' > /app/env.sh
+
+# Le PATH aussi, et pour la même raison : cron donne à ses tâches un PATH minimal
+# où /app/.venv/bin n'est pas, alors la tâche mourait sur « meteo: not found » —
+# sans bruit ailleurs que dans les logs, l'app se contentant de ne plus fraîchir.
+echo "export PATH=\"$PATH\"" >> /app/env.sh
 chmod 600 /app/env.sh
 
 echo "Lot planifié en place :"
