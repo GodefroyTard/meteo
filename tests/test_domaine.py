@@ -3,7 +3,7 @@ from datetime import date, timedelta
 import numpy as np
 import pytest
 
-from meteo.domaine import cycle, indicateurs, qualite, tendance
+from meteo.domaine import cycle, indicateurs, qualite, secheresse, tendance
 from meteo.domaine.conditions import (
     CRANS_AIR,
     CRANS_UV,
@@ -716,3 +716,97 @@ class TestRecords:
         parts = {p.decennie: p for p in indicateurs.parts_par_decennie(serie, [])}
         assert parts[2000].attendus == pytest.approx(365 * 3 / 5)
         assert parts[2010].attendus == pytest.approx(365 * 2 / 5)
+
+
+# --- Sécheresse : le bilan hydrique estival et son échelle standardisée.
+
+
+def _saison_pleine(annee, valeur):
+    """Toute la saison mai-septembre d'une année, à valeur constante."""
+    jour, valeurs = date(annee, 5, 1), {}
+    while jour <= date(annee, 9, 30):
+        valeurs[jour] = valeur
+        jour += timedelta(days=1)
+    return valeurs
+
+
+class TestBilans:
+    def test_le_cumul_ne_porte_que_sur_la_saison(self):
+        pluie = _saison_pleine(2001, 2.0) | {date(2001, 1, 15): 100.0}
+        etp = _saison_pleine(2001, 3.0)
+        (bilan,) = secheresse.bilans(pluie, etp)
+        # 153 jours de saison à 2 mm : le déluge de janvier n'y entre pas.
+        assert bilan.apport_mm == pytest.approx(153 * 2.0)
+        assert bilan.demande_mm == pytest.approx(153 * 3.0)
+        assert bilan.bilan_mm == pytest.approx(-153.0)
+
+    def test_une_saison_trouee_d_un_seul_cote_est_ecartee(self):
+        # Un bilan calculé sur une pluie complète et une demande trouée paraîtrait
+        # excédentaire alors qu'il ne serait qu'incomplet.
+        pluie = _saison_pleine(2001, 2.0)
+        etp = {j: 3.0 for j in _saison_pleine(2001, 3.0) if j.month != 7}
+        assert secheresse.bilans(pluie, etp) == []
+
+    def test_une_annee_sans_l_autre_serie_est_ignoree(self):
+        pluie = _saison_pleine(2001, 2.0) | _saison_pleine(2002, 2.0)
+        etp = _saison_pleine(2001, 3.0)
+        assert [b.annee for b in secheresse.bilans(pluie, etp)] == [2001]
+
+
+class TestEchelleStandardisee:
+    def _saisons(self, valeurs):
+        return [
+            secheresse.BilanSaison(annee=a, apport_mm=v, demande_mm=0.0, jours=153)
+            for a, v in valeurs.items()
+        ]
+
+    def test_refus_sous_trente_annees(self):
+        courtes = self._saisons({a: float(a) for a in range(1990, 2010)})
+        assert secheresse.standardiser(courtes) == []
+
+    def test_la_plus_seche_recoit_l_indice_le_plus_bas(self):
+        saisons = self._saisons({a: float(a % 37) for a in range(1950, 2010)})
+        etats = {e.annee: e for e in secheresse.standardiser(saisons)}
+        plus_sec = min(saisons, key=lambda b: b.bilan_mm).annee
+        assert etats[plus_sec].indice == min(e.indice for e in etats.values())
+        assert etats[plus_sec].sec
+
+    def test_l_indice_ne_sort_pas_de_l_echantillon(self):
+        # Conséquence assumée de la standardisation par les rangs : sur n années, la
+        # plus sèche vaut au mieux Phi-1(0,44/(n+0,12)).
+        saisons = self._saisons({a: float(a) for a in range(1950, 2000)})
+        indices = [e.indice for e in secheresse.standardiser(saisons)]
+        assert min(indices) > -2.6
+        assert max(indices) < 2.6
+
+    def test_la_moitie_des_annees_est_sous_zero(self):
+        saisons = self._saisons({a: float(a % 41) for a in range(1930, 2030)})
+        etats = secheresse.standardiser(saisons)
+        negatifs = sum(1 for e in etats if e.indice < 0)
+        assert 45 <= negatifs <= 55, "la standardisation doit centrer la série"
+
+
+class TestClasses:
+    def test_les_bornes_usuelles(self):
+        assert secheresse.classe_de(-2.5)[0] == "extremement_sec"
+        assert secheresse.classe_de(-2.0)[0] == "extremement_sec"
+        assert secheresse.classe_de(-1.6)[0] == "severement_sec"
+        assert secheresse.classe_de(-1.0)[0] == "moderement_sec"
+        assert secheresse.classe_de(0.0)[0] == "normal"
+        assert secheresse.classe_de(1.0)[0] == "normal"
+        assert secheresse.classe_de(1.2)[0] == "moderement_humide"
+        assert secheresse.classe_de(2.5)[0] == "extremement_humide"
+
+
+class TestFrequences:
+    def test_rapportees_aux_annees_apportees(self):
+        # Une décennie tronquée ne doit pas paraître épargnée parce qu'elle est brève.
+        etats = [
+            secheresse.EtatSec(annee=a, bilan_mm=0.0, indice=-1.5 if a >= 2010 else 0.0,
+                               classe="x", libelle="x")
+            for a in list(range(2000, 2010)) + [2010, 2011]
+        ]
+        par_decennie = {f.decennie: f for f in secheresse.frequences(etats)}
+        assert par_decennie[2000].seches == 0
+        assert par_decennie[2010].annees == 2
+        assert par_decennie[2010].part == pytest.approx(1.0)
