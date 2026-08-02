@@ -10,7 +10,14 @@ x-meteo: &meteo
     # Dans le réseau de compose, la base répond sur son nom de service, pas sur
     # localhost:5433. Cette valeur l'emporte sur celle du .env, qui reste utile
     # quand on lance le serveur à la main sur l'hôte.
-    METEO_DSN: postgresql+psycopg://meteo:${METEO_MDP_BASE:-meteo}@db:5432/meteo
+    #
+    # Le mot de passe est délibérément absent de l'URL : il passe par PGPASSWORD,
+    # que libpq lit quand le DSN n'en fournit pas. Concaténé dans l'URL, un mot de
+    # passe contenant « @ », « / » ou « # » la couperait au mauvais endroit — et
+    # « openssl rand -base64 » en produit régulièrement. YAML ne sait pas encoder
+    # une URL ; ce détour supprime le problème au lieu de le documenter.
+    METEO_DSN: postgresql+psycopg://meteo@db:5432/meteo
+    PGPASSWORD: ${METEO_MDP_BASE:-meteo}
   restart: unless-stopped
 
 services:
