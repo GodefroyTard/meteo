@@ -22,6 +22,7 @@ uv run meteo stations         # importe le référentiel StatIC, fixe le périm�
 uv run meteo previsions       # backfill Open-Meteo (long : ~2 h sur 2 ans et demi)
 uv run meteo observations     # backfill Infoclimat — voir la contrainte d'IP ci-dessous
 uv run meteo verdicts         # recalcule tout et remplace la table
+uv run meteo climatologie     # séries longues Météo-France (~1 min, aucun jeton)
 uv run meteo servir           # http://127.0.0.1:8000
 ```
 
@@ -59,7 +60,7 @@ Exposer le déclencheur à tout visiteur revenait à confier le quota d'une asso
 bénévoles à des inconnus. Les routes `POST /api/rafraichir` et `GET /api/rafraichissement`
 restent disponibles pour un déclenchement manuel, avec leur garde-fou de 30 minutes.
 
-## Les deux sources
+## Les trois sources
 
 **Open-Meteo** fournit les prévisions, y compris *les runs passés* : c'est ce qui permet
 de calculer des statistiques rétroactivement au lieu d'attendre des mois de collecte.
@@ -88,13 +89,22 @@ Trois contraintes à connaître ensuite :
 C'est une association de bénévoles qui offre ce service gratuitement. Le client respecte
 ces limites, ne les desserrez pas.
 
+**Météo-France** fournit les séries longues, par le jeu « Données climatologiques de base -
+quotidiennes » publié sur [meteo.data.gouv.fr](https://meteo.data.gouv.fr/) sous licence
+ouverte LOV2. Un fichier par département, sans jeton ni quota : l'Isère entière pèse 18 Mo
+compressés et remonte à 1950, parfois bien avant.
+
+Ces données alimentent la seule page climat et **n'entrent jamais dans un verdict** : un
+maximum quotidien n'est pas comparable à une prévision horaire, et les postes ne sont pas
+là où sont les stations. Voir [ADR 0008](docs/adr/0008-la-serie-longue-ne-juge-aucun-modele.md).
+
 ## Organisation du code
 
 ```
 src/meteo/
   domaine/      logique pure — aucune E/S, entièrement testable
   stockage/     schéma et session SQLAlchemy
-  collecte/     clients HTTP Open-Meteo et Infoclimat
+  collecte/     clients HTTP Open-Meteo, Infoclimat et Météo-France
   lots/         traitements par lot : référentiel, backfill, calcul des verdicts
   api/          FastAPI, lecture seule sur les verdicts matérialisés
   web/          gabarits, feuilles de style, icônes du Temps et tracé SVG du front

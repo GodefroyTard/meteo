@@ -210,6 +210,26 @@ docker compose up -d --build
 
 Le `.env` n'étant pas suivi, `git pull` ne l'écrasera jamais.
 
+Si la mise à jour ajoute des tables, créez-les — `init-base` ne touche pas aux tables
+existantes et ne perd donc aucune donnée :
+
+```bash
+docker compose exec -T lot meteo init-base
+```
+
+**Charger les séries longues Météo-France**
+
+La page climat a besoin des données climatologiques, qui ne sont pas dans le dump si
+celui-ci est antérieur. Le chargement dure quelques minutes et ne demande aucun jeton :
+
+```bash
+docker compose exec -T lot meteo climatologie
+```
+
+Ensuite le lot s'en charge, le lundi à 4 h 23. Pour ajouter un département, complétez
+`METEO_DEPARTEMENTS_CLIMAT` dans le `.env`, relancez `docker compose up -d`, puis
+rejouez la commande — elle est idempotente.
+
 **Sauvegarder la base**
 
 Le dump est petit ; une sauvegarde quotidienne coûte peu. Sur le VPS, dans `crontab -e` :

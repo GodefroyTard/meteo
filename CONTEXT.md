@@ -68,6 +68,58 @@ La proportion d'Observations valides effectivement disponibles sur une case de V
 d'un minimum, la case n'est pas publiée : on refuse de conclure plutôt que de conclure sur peu.
 _Avoid_: Complétude, taux de remplissage, disponibilité
 
+### La mémoire du lieu
+
+**Poste**:
+Un poste climatologique Météo-France, porteur d'une Série longue. Distinct de la Station : le Poste
+raconte le passé du lieu, il ne départage jamais un Modèle. Ses mesures sont quotidiennes là où
+celles d'une Station sont horaires, et les deux ne se mélangent pas (ADR 0008).
+_Avoid_: Station Météo-France, station historique
+
+**Série longue**:
+La suite des Journées mesurées par un Poste, de sa première année à sa dernière. Sa valeur ne tient
+pas à son étendue mais à ses **années pleines** : Grenoble-Saint-Geoirs court de 1950 à 2024 mais
+n'a rien mesuré de 1952 à 1967.
+_Avoid_: Historique, archive, historique climatique
+
+**Tendance**:
+La droite ajustée par moindres carrés sur les valeurs d'un jour de l'année, année après année.
+Toujours accompagnée de son incertitude ; déclarée **significative** seulement quand l'intervalle
+de confiance de sa pente exclut zéro. S'exprime par décennie, dans l'unité de ce qu'elle
+ajuste : des °C pour une température, des jours pour un Franchissement.
+_Avoid_: Évolution, courbe, régression, trend
+
+**Cycle annuel**:
+La courbe d'une année entière, du 1er janvier au 31 décembre, portant la moyenne
+quotidienne lissée sur un mois. Superposés, les Cycles montrent la forme du climat d'un
+lieu ; le lissage en retire les extrêmes, qui se lisent sur la Tendance et non ici.
+_Avoid_: Saisonnalité, profil annuel, climatologie
+
+**Franchissement**:
+Le nombre de jours d'une année passant un seuil de température — sous 0 °C, au-dessus de
+25 °C, au-dessus de 30 °C. Un comptage, pas une moyenne : c'est ce qui le rend robuste à
+un changement d'instrument et immédiatement parlant. Ne se calcule que sur une année
+suffisamment mesurée, jamais au prorata d'une année lacunaire.
+_Avoid_: Jours chauds, dépassement, occurrence
+
+**Saison sans gel**:
+Ce qui sépare le dernier gel de printemps du premier gel d'automne, de part et d'autre du
+1er juillet. Une année dont l'un des deux manque est omise : sa saison déborde de l'année
+civile, et la borner inventerait une date.
+_Avoid_: Période végétative, saison de croissance
+
+**Record**:
+La valeur extrême d'un jour du calendrier, et l'année qui la détient. Ne se lit qu'en
+part de ce qu'un climat stable donnerait — proportionnelle aux années qu'une décennie
+apporte — jamais en décompte brut, qui confondrait le signal avec la forme du calendrier.
+_Avoid_: Extrême, maximum absolu, pic
+
+**Prolongement**:
+La même Tendance poursuivie au-delà des années mesurées. Ce n'est pas une prévision et ce n'est
+pas un scénario climatique : c'est une droite prolongée, sous l'hypothèse — que rien ne garantit —
+que le rythme passé se maintienne. Toujours tracé en tireté, jamais en trait plein.
+_Avoid_: Projection, prévision, scénario, RCP
+
 ### Le jugement
 
 **Verdict**:
