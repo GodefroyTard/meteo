@@ -8,3 +8,11 @@
 # La configuration est relue depuis /app/env.sh : cron ne transmet pas l'environnement
 # du conteneur à ses tâches. La sortie part sur celle de PID 1, donc dans `docker logs`.
 17 * * * * . /app/env.sh; cd /app && meteo rafraichir >>/proc/1/fd/1 2>&1
+
+# Séries longues Météo-France, une fois par semaine. Le fichier départemental est
+# republié régulièrement mais son contenu ne bouge que par sa dernière tranche : le
+# recharger plus souvent téléchargerait soixante-quinze ans de mesures pour en
+# rafraîchir quelques jours. Le chargement est idempotent, un doublon est impossible.
+#
+# Le lundi à 4 h 23 : hors de l'heure des sauvegardes, et loin du haut de l'heure.
+23 4 * * 1 . /app/env.sh; cd /app && meteo climatologie >>/proc/1/fd/1 2>&1

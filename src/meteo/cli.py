@@ -5,7 +5,7 @@ from datetime import date
 import typer
 
 from meteo.config import config
-from meteo.lots import backfill, rafraichissement, referentiel, verdicts
+from meteo.lots import backfill, climatologie, rafraichissement, referentiel, verdicts
 from meteo.stockage.session import creer_schema
 
 app = typer.Typer(help="Fiabilité des modèles météo, station par station.", no_args_is_help=True)
@@ -29,6 +29,23 @@ def stations() -> None:
     )
     for s in retenues:
         typer.echo(f"  {s.distance_km:5.1f} km  {s.altitude:>5.0f} m  {s.code:12} {s.nom}")
+
+
+@app.command("climatologie")
+def charger_climatologie(
+    departements: str = typer.Option(
+        "",
+        help="Départements séparés par des virgules. Par défaut, METEO_DEPARTEMENTS_CLIMAT.",
+    ),
+) -> None:
+    """Charge les séries longues Météo-France (températures quotidiennes depuis 1950)."""
+    demandes = [d.strip() for d in departements.split(",") if d.strip()]
+    resultat = climatologie.charger(demandes or None)
+    typer.echo(
+        f"{resultat['journees']} journées chargées pour les départements "
+        f"{', '.join(resultat['departements'])}, "
+        f"{resultat['postes']} postes référencés."
+    )
 
 
 @app.command("previsions")

@@ -21,6 +21,15 @@ class Config(BaseSettings):
 
     debut_historique: date = date(2024, 2, 4)
 
+    # Départements dont la Série longue est chargée, séparés par des virgules. Les
+    # fichiers Météo-France sont départementaux : c'est la maille de téléchargement,
+    # pas un choix de périmètre. Un département voisin s'ajoute sans rien recharger.
+    departements_climat: str = "38"
+
+    @property
+    def departements(self) -> list[str]:
+        return [d.strip() for d in self.departements_climat.split(",") if d.strip()]
+
 
 @lru_cache
 def config() -> Config:
