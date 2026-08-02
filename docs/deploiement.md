@@ -92,22 +92,18 @@ sudo ufw enable
 
 ## 4. Déposer le code
 
-Le dépôt n'a pas encore de remote : le plus simple est de synchroniser le dossier depuis
-votre poste.
+Le code est sur GitHub. Depuis le VPS :
 
 ```bash
-# depuis le poste de développement, à la racine du projet
-rsync -av --delete \
-  --exclude '.git' --exclude '.venv' --exclude '__pycache__' \
-  --exclude '.env' --exclude '*.dump' --exclude '.pytest_cache' --exclude '.ruff_cache' \
-  ./ utilisateur@IP_DU_VPS:~/meteo/
+sudo apt install -y git
+git clone https://github.com/GodefroyTard/meteo.git ~/meteo
 ```
 
-Le `.env` est volontairement exclu : il contient votre jeton, et sa valeur `METEO_DSN`
-n'est pas la bonne pour le VPS. On le crée à la main juste après.
+Le clone se fait en **HTTPS**, sans clé : le dépôt est public et le VPS n'a de toute façon
+rien à y pousser. Les mises à jour se feront par `git pull`.
 
-*Plus tard :* pousser le projet sur un dépôt Git privé rendra les mises à jour plus
-propres (`git pull` au lieu d'un `rsync`).
+Le `.env` n'est pas dans le dépôt — il contient votre jeton, et sa valeur `METEO_DSN` ne
+serait pas la bonne pour le VPS. On le crée à la main juste après.
 
 ## 5. Écrire le `.env` du VPS
 
@@ -204,10 +200,15 @@ docker compose logs -f proxy    # le certificat, les erreurs d'accès
 
 **Déployer une modification**
 
+Poussez depuis votre poste (`git push`), puis sur le VPS :
+
 ```bash
-# depuis le poste : le rsync de l'étape 4, puis sur le VPS
+cd ~/meteo
+git pull
 docker compose up -d --build
 ```
+
+Le `.env` n'étant pas suivi, `git pull` ne l'écrasera jamais.
 
 **Sauvegarder la base**
 
@@ -235,5 +236,6 @@ docker compose up -d --build lot
 | Le site répond mais pas en HTTPS | `METEO_DOMAINE` absent du `.env` : Caddy est retombé sur `localhost` |
 | Aucune observation collectée | l'IP du VPS n'est pas déclarée chez Infoclimat |
 | Le lot échoue avec une erreur de connexion | `METEO_DSN` a été forcé dans le `.env` ; laissez le compose le définir |
+| `failed to resolve host '…@db'` | un `METEO_MDP_BASE` entre guillemets, ou une version du code antérieure au passage par `PGPASSWORD` : faites `git pull` puis `docker compose up -d --build` |
 | `docker compose up` ne démarre que 2 services | `COMPOSE_PROFILES=vps` manque dans le `.env` |
 | Le site est inaccessible depuis l'extérieur | `sudo ufw status` — 80 et 443 doivent être autorisés |
