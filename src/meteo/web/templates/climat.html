@@ -422,6 +422,137 @@
     </div>
   </section>
   {% endif %}
+
+  {% if donnees_secheresse %}
+  {% set sec = donnees_secheresse %}
+  {% set mois_saison = noms_mois_complets[sec.mois[0] - 1] ~ " à " ~ noms_mois_complets[sec.mois[1] - 1] %}
+  <section>
+    <div class="section-cadre">
+      <h2>Ce que l'été reçoit, ce qu'il réclame</h2>
+      <p class="assise">
+        {% set tb = sec.tendances.bilan %}
+        {% if tb and tb.significative %}
+          De {{ mois_saison }} à {{ serie.poste.nom_lisible }}, l'eau disponible a reculé
+          de <em>{{ "%.0f" | format(-tb.evolution_totale) }} mm</em> depuis
+          {{ (sec.saisons | first).annee }}.
+          {%- set ta = sec.tendances.apport %}{% set td = sec.tendances.demande %}
+          {%- if ta and td %}
+            {% if td.significative and not ta.significative %}
+              La pluie n'a pas significativement changé : c'est la demande qui a
+              augmenté, de {{ "%.0f" | format(td.evolution_totale) }} mm.
+            {% elif td.significative and ta.significative %}
+              Les deux causes y contribuent : {{ "%.0f" | format(td.evolution_totale) }} mm
+              de demande en plus, {{ "%.0f" | format(-ta.evolution_totale) }} mm de pluie
+              en moins.
+            {% endif %}
+          {% endif %}
+        {% else %}
+          De {{ mois_saison }} à {{ serie.poste.nom_lisible }}, le bilan hydrique ne montre
+          pas d'évolution assurée.
+        {% endif %}
+      </p>
+      <p class="assise">
+        La courbe bleue est ce que la saison reçoit, la brune ce que l'atmosphère lui
+        prend. La bande entre les deux est ce qu'il reste — ou ce qui manque. Les
+        tiretés sont les droites ajustées.
+      </p>
+
+      <div class="viz secheresse" data-bilan>
+        <div class="viz-cadre">
+          <p class="viz-vide">
+            Le graphe demande JavaScript. Les cumuls restent lisibles dans le tableau
+            ci-dessous.
+          </p>
+        </div>
+        <div class="viz-bulle" role="status" aria-live="polite" data-visible="false"></div>
+        <ul class="viz-legende"></ul>
+
+        <details class="viz-tableau">
+          <summary>Voir les cumuls</summary>
+          <div class="defilable">
+            <table>
+              <thead>
+                <tr>
+                  <th>Saison</th><th>Pluie</th><th>Demande</th><th>Bilan</th><th>Indice</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% set indices = {} %}
+                {% for e in sec.etats %}{% set _ = indices.update({e.annee: e}) %}{% endfor %}
+                {% for s in sec.saisons | reverse %}
+                  <tr>
+                    <td>{{ s.annee }}</td>
+                    <td>{{ s.apport }} mm</td>
+                    <td>{{ s.demande }} mm</td>
+                    <td>{{ "%+d" | format(s.bilan) }} mm</td>
+                    <td>
+                      {%- if s.annee in indices -%}
+                        {{ "%+.2f" | format(indices[s.annee].indice) }}
+                      {%- else -%}—{%- endif -%}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <script type="application/json" id="bilan-donnees">{{ sec | tojson }}</script>
+      </div>
+
+      <p class="assise mention">
+        La demande est l'évapotranspiration potentielle
+        {%- if sec.source == "monteith" %}, calculée par Penman-Monteith depuis les
+        mesures de ce poste — vent, humidité et rayonnement compris.
+        {%- else %}, interpolée sur une grille par Météo-France. Ce poste ne la mesure
+        pas lui-même. Là où les deux existent, la grille atténue le signal d'environ un
+        tiers : lisez cette section comme une borne basse.
+        {%- endif %}
+      </p>
+    </div>
+  </section>
+
+  {% if sec.etats %}
+  <section>
+    <div class="section-cadre">
+      <h2>L'état de chaque été</h2>
+      <p class="assise">
+        Chaque saison est située par rapport à toutes les autres du poste, sur l'échelle
+        standardisée usuelle. Une barre pleinement brune est une saison extrême, une
+        barre presque grise une saison ordinaire.
+        {% set seches = sec.etats | selectattr("sec") | list %}
+        {% if seches %}
+          {{ seches | length }} saisons sèches sur {{ sec.etats | length }} ;
+          la plus sèche est <em>{{ (sec.etats | sort(attribute="indice") | first).annee }}</em>.
+        {% endif %}
+      </p>
+
+      <div class="viz secheresse" data-etats>
+        <div class="viz-cadre">
+          <p class="viz-vide">
+            Le graphe demande JavaScript. Les indices figurent dans le tableau de la
+            section précédente.
+          </p>
+        </div>
+        <div class="viz-bulle" role="status" aria-live="polite" data-visible="false"></div>
+        <script type="application/json" id="etats-donnees">{{ sec | tojson }}</script>
+      </div>
+
+      <p class="assise mention">
+        L'échelle est construite par les rangs des {{ sec.etats | length }} saisons
+        mesurées, sans ajuster de loi : avec autant d'années, la distribution observée
+        est mieux connue que n'importe quelle famille qu'on lui imposerait. Une
+        conséquence en découle — l'indice ne peut pas sortir de l'échantillon. Une
+        sécheresse inédite apparaîtra comme la plus sèche connue, pas au-delà.
+      </p>
+      <p class="assise mention">
+        C'est une sécheresse météorologique : ni sol, ni nappe, ni fonte des neiges.
+        Elle dit ce que le ciel donne et reprend, pas ce que la terre en garde.
+      </p>
+    </div>
+  </section>
+  {% endif %}
+  {% endif %}
 {% endblock %}
 
 {% block scripts %}

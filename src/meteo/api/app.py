@@ -22,7 +22,7 @@ from meteo.collecte.open_meteo import (
     previsions_courantes,
     qualite_air,
 )
-from meteo.domaine import conditions, cycle, indicateurs, tendance
+from meteo.domaine import conditions, cycle, indicateurs, secheresse, tendance
 from meteo.domaine.modeles import ANTICIPATION_MAX, CATALOGUE, PAR_CLE
 from meteo.domaine.saison import Saison, saison_de
 from meteo.domaine.temps import INCONNU, temps_de
@@ -830,6 +830,43 @@ def _serie_tendance(t, debut: int, fin: int, decimales: int = 2) -> dict | None:
     }
 
 
+def _serie_secheresse(s) -> dict | None:
+    """Le bilan hydrique estival et l'état standardisé de chaque saison."""
+    if s is None or not s.bilans:
+        return None
+    debut, fin = s.bilans[0].annee, s.bilans[-1].annee
+    return {
+        "source": s.source,
+        "saisons": [
+            {
+                "annee": b.annee,
+                "apport": round(b.apport_mm),
+                "demande": round(b.demande_mm),
+                "bilan": round(b.bilan_mm),
+            }
+            for b in s.bilans
+        ],
+        "etats": [
+            {
+                "annee": e.annee,
+                "indice": round(e.indice, 2),
+                "classe": e.classe,
+                "libelle": e.libelle,
+                "bilan": round(e.bilan_mm),
+                "sec": e.sec,
+            }
+            for e in s.etats
+        ],
+        "tendances": {
+            "apport": _serie_tendance(s.tendance_apport, debut, fin, decimales=1),
+            "demande": _serie_tendance(s.tendance_demande, debut, fin, decimales=1),
+            "bilan": _serie_tendance(s.tendance_bilan, debut, fin, decimales=1),
+        },
+        "seuil_sec": secheresse.SEUIL_SEC,
+        "mois": list(secheresse.MOIS_SAISON),
+    }
+
+
 def _serie_franchissements(series) -> dict | None:
     """Les décomptes annuels des trois seuils, sur un axe commun.
 
@@ -1054,6 +1091,9 @@ def climat(
             "donnees_gel": _serie_gel(dossier.gel) if dossier else None,
             "records": dossier.records if dossier else None,
             "donnees_records": _serie_records(dossier.records) if dossier else None,
+            "secheresse": dossier.secheresse if dossier else None,
+            "donnees_secheresse": _serie_secheresse(dossier.secheresse) if dossier else None,
+            "noms_mois_complets": list(_NOMS_MOIS),
             "ecarts_types_bruit": indicateurs.ECARTS_TYPES_BRUIT,
             "annees_minimum": tendance.ANNEES_MINIMUM,
             "annee_pleine_j": tendance.JOURS_ANNEE_PLEINE,

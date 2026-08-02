@@ -390,3 +390,56 @@
 
 .viz.records .cle.chaleur { background: var(--chaud); }
 .viz.records .cle.froid { background: var(--froid); }
+
+/* ---------------------------------------------------------------------------
+   Sécheresse : ce que la saison reçoit face à ce qu'elle réclame.
+
+   Deux teintes seulement, et elles portent un sens physique et non une identité :
+   le brun pour le manque, le bleu pour l'eau. Paire vérifiée pour les deux modes,
+   ΔE protanope 20,9 en clair et 22,9 en sombre.
+
+   L'intensité de la barre suit la sévérité : color-mix interpole entre le pôle et
+   un gris neutre selon --force, que le script pose à partir de l'indice. Une
+   saison dans la normale est donc presque grise, une saison extrême pleinement
+   colorée — l'échelle se lit sans légende. */
+.viz.secheresse {
+  --sec: #a8621c;
+  --humide: #2f6cad;
+  --neutre: #9a9992;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz.secheresse {
+    --sec: #c2822f;
+    --humide: #5695d8;
+    --neutre: #6d6c67;
+  }
+}
+:root[data-theme="dark"] .viz.secheresse {
+  --sec: #c2822f;
+  --humide: #5695d8;
+  --neutre: #6d6c67;
+}
+
+.bilan-courbe { fill: none; stroke-width: 2; stroke-linejoin: round; }
+.bilan-courbe.apport { stroke: var(--humide); }
+.bilan-courbe.demande { stroke: var(--sec); }
+.bilan-droite { fill: none; stroke-width: 2.6; stroke-dasharray: 6 4; opacity: .75; }
+.bilan-droite.apport { stroke: var(--humide); }
+.bilan-droite.demande { stroke: var(--sec); }
+
+.bilan-bande { stroke: none; }
+.bilan-bande.deficit { fill: var(--sec); opacity: .18; }
+.bilan-bande.excedent { fill: var(--humide); opacity: .15; }
+
+.etat-barre {
+  fill: color-mix(in oklab, var(--pole), var(--neutre) calc((1 - var(--force)) * 100%));
+}
+.etat-barre.sec { --pole: var(--sec); }
+.etat-barre.humide { --pole: var(--humide); }
+
+.etat-seuil { stroke: var(--sec); stroke-width: 1.2; stroke-dasharray: 5 4; }
+.etat-seuil-texte { fill: var(--viz-muted); font-size: 11px; }
+
+.viz.secheresse .cle.apport { background: var(--humide); }
+.viz.secheresse .cle.demande { background: var(--sec); }

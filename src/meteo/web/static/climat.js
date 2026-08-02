@@ -949,9 +949,260 @@
     surRedimensionnement(etat, rendre);
   }
 
+  // ---------------------------------------------------------------------------
+  // Graphe 6 : ce que l'été reçoit face à ce qu'il réclame.
+  // ---------------------------------------------------------------------------
+  function grapheBilan() {
+    var racine = document.querySelector('[data-bilan]');
+    var donnees = json('bilan-donnees');
+    if (!racine || !donnees || !donnees.saisons.length) return;
+
+    var cadre = racine.querySelector('.viz-cadre');
+    var legende = racine.querySelector('.viz-legende');
+    var bulle = racine.querySelector('.viz-bulle');
+    var etat = { cadre: cadre, etroit: false };
+    var saisons = donnees.saisons;
+
+    /* La bande entre les deux courbes change de sens quand elles se croisent. On
+       découpe donc intervalle par intervalle, en coupant au point de croisement :
+       une bande d'une seule teinte laisserait croire au déficit permanent, ou à
+       l'excédent, selon la couleur choisie. */
+    function bandes(x, y) {
+      var polygones = [];
+      for (var i = 0; i < saisons.length - 1; i++) {
+        var g = saisons[i], d = saisons[i + 1];
+        var sg = g.apport - g.demande, sd = d.apport - d.demande;
+        var xg = x(g.annee), xd = x(d.annee);
+        if (sg === 0 && sd === 0) continue;
+        if ((sg >= 0) === (sd >= 0)) {
+          polygones.push({
+            classe: sg < 0 ? 'deficit' : 'excedent',
+            points: [[xg, y(g.apport)], [xd, y(d.apport)], [xd, y(d.demande)], [xg, y(g.demande)]]
+          });
+          continue;
+        }
+        var t = sg / (sg - sd);
+        var xc = xg + t * (xd - xg);
+        var yc = y(g.apport + t * (d.apport - g.apport));
+        polygones.push({
+          classe: sg < 0 ? 'deficit' : 'excedent',
+          points: [[xg, y(g.apport)], [xc, yc], [xg, y(g.demande)]]
+        });
+        polygones.push({
+          classe: sd < 0 ? 'deficit' : 'excedent',
+          points: [[xc, yc], [xd, y(d.apport)], [xd, y(d.demande)]]
+        });
+      }
+      return polygones;
+    }
+
+    function rendre() {
+      var c = cadrage(cadre, 360, 300);
+      etat.etroit = c.etroit;
+      cadre.textContent = '';
+
+      var valeurs = [];
+      saisons.forEach(function (s) { valeurs.push(s.apport, s.demande); });
+      var y0 = Math.min.apply(null, valeurs) * 0.92;
+      var y1 = Math.max.apply(null, valeurs) * 1.04;
+      var x0 = saisons[0].annee, x1 = saisons[saisons.length - 1].annee;
+
+      var M = c.marges;
+      var largeurTrace = c.largeur - M.gauche - M.droite;
+      var hauteurTrace = c.hauteur - M.haut - M.bas;
+      function x(a) { return M.gauche + (a - x0) / (x1 - x0) * largeurTrace; }
+      function y(v) { return M.haut + (y1 - v) / (y1 - y0) * hauteurTrace; }
+
+      var svg = el('svg', {
+        viewBox: '0 0 ' + c.largeur + ' ' + c.hauteur,
+        preserveAspectRatio: 'xMidYMid meet', role: 'img'
+      });
+      svg.setAttribute('aria-label',
+        'Pluie et évapotranspiration cumulées sur la saison, année après année.');
+
+      graduations(y0, y1, c.etroit ? 4 : 6).forEach(function (v) {
+        svg.appendChild(el('line', {
+          x1: M.gauche, x2: c.largeur - M.droite, y1: y(v), y2: y(v), class: 'viz-grille-ligne'
+        }));
+        var t = el('text', { x: M.gauche - 8, y: y(v) + 4, class: 'viz-graduation y' });
+        t.textContent = v;
+        svg.appendChild(t);
+      });
+      graduations(x0, x1, c.etroit ? 4 : 8).forEach(function (a) {
+        if (a < x0 || a > x1) return;
+        var t = el('text', { x: x(a), y: c.hauteur - M.bas + 18, class: 'viz-graduation x' });
+        t.textContent = a;
+        svg.appendChild(t);
+      });
+      svg.appendChild(el('line', {
+        x1: M.gauche, x2: c.largeur - M.droite,
+        y1: c.hauteur - M.bas, y2: c.hauteur - M.bas, class: 'viz-axe-ligne'
+      }));
+
+      bandes(x, y).forEach(function (p) {
+        svg.appendChild(el('path', { d: chemin(p.points) + ' Z', class: 'bilan-bande ' + p.classe }));
+      });
+
+      [['apport', 'apport'], ['demande', 'demande']].forEach(function (paire) {
+        svg.appendChild(el('path', {
+          d: chemin(saisons.map(function (s) { return [x(s.annee), y(s[paire[0]])]; })),
+          class: 'bilan-courbe ' + paire[1]
+        }));
+        var t = donnees.tendances[paire[0]];
+        if (t) {
+          svg.appendChild(el('path', {
+            d: chemin(t.courbe.map(function (p) { return [x(p.annee), y(p.valeur)]; })),
+            class: 'bilan-droite ' + paire[1]
+          }));
+        }
+      });
+
+      var survol = el('g', {});
+      svg.appendChild(survol);
+      cadre.appendChild(svg);
+
+      svg.addEventListener('pointermove', function (evt) {
+        var boite = svg.getBoundingClientRect();
+        var ratio = (evt.clientX - boite.left) / boite.width * c.largeur;
+        var annee = Math.round(x0 + (ratio - M.gauche) / largeurTrace * (x1 - x0));
+        var s = saisons.find(function (v) { return v.annee === annee; });
+        survol.textContent = '';
+        if (!s) { bulle.dataset.visible = 'false'; return; }
+        survol.appendChild(el('line', {
+          x1: x(annee), x2: x(annee), y1: M.haut, y2: c.hauteur - M.bas, class: 'climat-curseur'
+        }));
+        remplirBulle(racine, bulle, String(annee), [
+          { cle: 'apport', nom: 'Reçu', mesure: s.apport + ' mm', second: '' },
+          { cle: 'demande', nom: 'Réclamé', mesure: s.demande + ' mm', second: '' },
+          { cle: 'apport', nom: 'Bilan', mesure: (s.bilan >= 0 ? '+' : '') + s.bilan + ' mm', second: '' }
+        ]);
+        placerBulle(racine, bulle, evt);
+      });
+      svg.addEventListener('pointerleave', function () {
+        survol.textContent = '';
+        bulle.dataset.visible = 'false';
+      });
+    }
+
+    [['apport', 'Reçu (pluie)'], ['demande', 'Réclamé (évapotranspiration)']].forEach(function (p) {
+      var t = donnees.tendances[p[0]];
+      var detail = t
+        ? (t.pente_par_decennie >= 0 ? '+' : '') + t.pente_par_decennie.toFixed(1) + ' mm/décennie'
+          + (t.significative ? '' : ' (non significative)')
+        : '';
+      ajouterLegende(legende, p[0], p[1], detail, '', function () { return true; });
+    });
+
+    rendre();
+    surRedimensionnement(etat, rendre);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Graphe 7 : l'état standardisé de chaque saison.
+  // ---------------------------------------------------------------------------
+  function grapheEtats() {
+    var racine = document.querySelector('[data-etats]');
+    var donnees = json('etats-donnees');
+    if (!racine || !donnees || !donnees.etats.length) return;
+
+    var cadre = racine.querySelector('.viz-cadre');
+    var bulle = racine.querySelector('.viz-bulle');
+    var etat = { cadre: cadre, etroit: false };
+    var etats = donnees.etats;
+
+    function rendre() {
+      var c = cadrage(cadre, 300, 260);
+      etat.etroit = c.etroit;
+      cadre.textContent = '';
+
+      var indices = etats.map(function (e) { return e.indice; });
+      var borne = Math.max(2.2, Math.max.apply(null, indices.map(Math.abs)) * 1.08);
+      var x0 = etats[0].annee, x1 = etats[etats.length - 1].annee;
+
+      var M = c.marges;
+      var largeurTrace = c.largeur - M.gauche - M.droite;
+      var hauteurTrace = c.hauteur - M.haut - M.bas;
+      var pas = largeurTrace / etats.length;
+      function x(a) { return M.gauche + (a - x0) / (x1 - x0 + 1) * largeurTrace; }
+      function y(v) { return M.haut + (borne - v) / (2 * borne) * hauteurTrace; }
+
+      var svg = el('svg', {
+        viewBox: '0 0 ' + c.largeur + ' ' + c.hauteur,
+        preserveAspectRatio: 'xMidYMid meet', role: 'img'
+      });
+      svg.setAttribute('aria-label',
+        'Indice standardisé de chaque saison : négatif quand elle est sèche.');
+
+      [-2, -1, 0, 1, 2].forEach(function (v) {
+        if (Math.abs(v) > borne) return;
+        svg.appendChild(el('line', {
+          x1: M.gauche, x2: c.largeur - M.droite, y1: y(v), y2: y(v),
+          class: v === donnees.seuil_sec ? 'etat-seuil' : 'viz-grille-ligne'
+        }));
+        var t = el('text', { x: M.gauche - 8, y: y(v) + 4, class: 'viz-graduation y' });
+        t.textContent = v;
+        svg.appendChild(t);
+      });
+      var repere = el('text', {
+        x: M.gauche + 4, y: y(donnees.seuil_sec) + 14, class: 'etat-seuil-texte'
+      });
+      repere.textContent = 'seuil de saison sèche';
+      svg.appendChild(repere);
+
+      graduations(x0, x1, c.etroit ? 4 : 8).forEach(function (a) {
+        if (a < x0 || a > x1) return;
+        var t = el('text', {
+          x: x(a) + pas / 2, y: c.hauteur - M.bas + 18, class: 'viz-graduation x'
+        });
+        t.textContent = a;
+        svg.appendChild(t);
+      });
+
+      etats.forEach(function (e) {
+        // L'intensité suit la sévérité : deux écarts-types saturent la teinte.
+        var force = Math.min(1, Math.abs(e.indice) / 2);
+        svg.appendChild(el('rect', {
+          x: x(e.annee) + 1,
+          y: e.indice >= 0 ? y(e.indice) : y(0),
+          width: Math.max(1, pas - 2),
+          height: Math.max(1, Math.abs(y(e.indice) - y(0))),
+          class: 'etat-barre ' + (e.indice < 0 ? 'sec' : 'humide'),
+          style: '--force:' + force.toFixed(3)
+        }));
+      });
+
+      svg.appendChild(el('line', {
+        x1: M.gauche, x2: c.largeur - M.droite, y1: y(0), y2: y(0), class: 'viz-axe-ligne'
+      }));
+
+      cadre.appendChild(svg);
+
+      svg.addEventListener('pointermove', function (evt) {
+        var boite = svg.getBoundingClientRect();
+        var ratio = (evt.clientX - boite.left) / boite.width * c.largeur;
+        var i = Math.floor((ratio - M.gauche) / pas);
+        if (i < 0 || i >= etats.length) { bulle.dataset.visible = 'false'; return; }
+        var e = etats[i];
+        remplirBulle(racine, bulle, String(e.annee), [{
+          cle: e.indice < 0 ? 'demande' : 'apport',
+          nom: e.libelle,
+          mesure: (e.indice >= 0 ? '+' : '') + e.indice.toFixed(2),
+          second: (e.bilan >= 0 ? '+' : '') + e.bilan + ' mm'
+        }]);
+        placerBulle(racine, bulle, evt);
+      });
+      svg.addEventListener('pointerleave', function () { bulle.dataset.visible = 'false'; });
+    }
+
+    rendre();
+    surRedimensionnement(etat, rendre);
+  }
+
   grapheTendance();
   grapheCycle();
   grapheSeuils();
   grapheGel();
   grapheRecords();
+  grapheBilan();
+  grapheEtats();
 })();

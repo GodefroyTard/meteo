@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import Date, cast, distinct, extract, func, select
 
-from meteo.domaine import cycle, indicateurs, qualite, tendance
+from meteo.domaine import cycle, indicateurs, qualite, secheresse, tendance
 from meteo.domaine.modeles import PAR_CLE
 from meteo.domaine.rattachement import COUT_MAXIMAL_CLIMAT_KM, Rattachement, rattacher
 from meteo.domaine.saison import Saison, heures_attendues, mois_de
@@ -413,6 +413,9 @@ class PosteResume:
     premiere_annee: int
     derniere_annee: int
     annees_pleines: int
+    annees_pluie: int
+    annees_etp: int
+    source_etp: str | None
 
     @property
     def nom_lisible(self) -> str:
@@ -488,6 +491,24 @@ class SerieRecords:
 
 
 @dataclass(frozen=True)
+class SerieSecheresse:
+    """Le bilan hydrique estival d'un Poste, saison après saison.
+
+    `source` dit d'où vient la demande évaporative — « monteith » quand elle est
+    calculée depuis les mesures du Poste, « grille » quand elle est interpolée. La
+    page doit le nommer : l'écart entre les deux n'est pas anecdotique (ADR 0009).
+    """
+
+    source: str
+    bilans: tuple[secheresse.BilanSaison, ...]
+    etats: tuple[secheresse.EtatSec, ...]
+    frequences: tuple[secheresse.FrequenceDecennie, ...]
+    tendance_bilan: tendance.Tendance | None
+    tendance_apport: tendance.Tendance | None
+    tendance_demande: tendance.Tendance | None
+
+
+@dataclass(frozen=True)
 class DossierClimat:
     """Tout ce que la page climat montre d'un Poste, chargé en une fois."""
 
@@ -497,6 +518,9 @@ class DossierClimat:
     franchissements: tuple[SerieFranchissement, ...]
     gel: SerieGel
     records: SerieRecords
+    secheresse: SerieSecheresse | None
+    """None quand le Poste n'a pas d'évapotranspiration exploitable — deux Postes sur
+    trois en Isère. On préfère l'absence de section à une section approximative."""
 
 
 def _resume_poste(p: Poste) -> PosteResume:
@@ -509,6 +533,9 @@ def _resume_poste(p: Poste) -> PosteResume:
         premiere_annee=p.premiere_annee,
         derniere_annee=p.derniere_annee,
         annees_pleines=p.annees_pleines,
+        annees_pluie=p.annees_pluie,
+        annees_etp=p.annees_etp,
+        source_etp=p.source_etp,
     )
 
 
@@ -547,6 +574,33 @@ def _mois_voisins(mois: int) -> list[int]:
     ans de mesures pour n'en garder qu'un quinzième.
     """
     return sorted({(mois - 2) % 12 + 1, mois, mois % 12 + 1})
+
+
+def _series_completes(s, poste_numero: str, source_etp: str | None):
+    """Les quatre séries d'un Poste : minima, maxima, pluie, demande évaporative.
+
+    La colonne d'évapotranspiration retenue dépend du Poste — Monteith là où elle
+    existe, la grille ailleurs. Charger les deux et trancher ici plutôt qu'en base
+    évite une requête conditionnelle pour une décision déjà prise à l'ingestion.
+    """
+    lignes = s.execute(
+        select(
+            Journee.jour,
+            Journee.tn_c,
+            Journee.tx_c,
+            Journee.rr_mm,
+            Journee.etp_monteith_mm,
+            Journee.etp_grille_mm,
+        ).where(Journee.poste_numero == poste_numero)
+    ).all()
+
+    colonne = "etp_monteith_mm" if source_etp == "monteith" else "etp_grille_mm"
+    return (
+        {r.jour: r.tn_c for r in lignes if r.tn_c is not None},
+        {r.jour: r.tx_c for r in lignes if r.tx_c is not None},
+        {r.jour: r.rr_mm for r in lignes if r.rr_mm is not None},
+        {r.jour: getattr(r, colonne) for r in lignes if getattr(r, colonne) is not None},
+    )
 
 
 def _extremes(s, poste_numero: str, mois: list[int] | None = None):
@@ -625,6 +679,28 @@ def _gel(minima) -> SerieGel:
     )
 
 
+def _secheresse(resume: PosteResume, pluie, etp) -> SerieSecheresse | None:
+    """Le bilan hydrique estival, ou rien.
+
+    Rien plutôt qu'une approximation : sans évapotranspiration mesurée ou analysée, la
+    seule voie serait de l'estimer depuis la température, ce qui sous-estime la tendance
+    d'un facteur deux et demi (ADR 0009).
+    """
+    if not resume.source_etp or not pluie or not etp:
+        return None
+    saisons = secheresse.bilans(pluie, etp)
+    etats = secheresse.standardiser(saisons)
+    return SerieSecheresse(
+        source=resume.source_etp,
+        bilans=tuple(saisons),
+        etats=tuple(etats),
+        frequences=tuple(secheresse.frequences(etats)),
+        tendance_bilan=_pente([(b.annee, b.bilan_mm) for b in saisons]),
+        tendance_apport=_pente([(b.annee, b.apport_mm) for b in saisons]),
+        tendance_demande=_pente([(b.annee, b.demande_mm) for b in saisons]),
+    )
+
+
 def _records(minima, maxima) -> SerieRecords:
     chauds = indicateurs.records(maxima, au_plus_haut=True)
     froids = indicateurs.records(minima, au_plus_haut=False)
@@ -662,7 +738,7 @@ def dossier(poste_numero: str, mois: int, jour: int) -> DossierClimat | None:
         if poste is None:
             return None
         resume = _resume_poste(poste)
-        minima, maxima = _extremes(s, poste_numero)
+        minima, maxima, pluie, etp = _series_completes(s, poste_numero, poste.source_etp)
 
     return DossierClimat(
         poste=resume,
@@ -671,4 +747,5 @@ def dossier(poste_numero: str, mois: int, jour: int) -> DossierClimat | None:
         franchissements=_franchissements(minima, maxima),
         gel=_gel(minima),
         records=_records(minima, maxima),
+        secheresse=_secheresse(resume, pluie, etp),
     )
