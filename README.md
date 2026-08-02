@@ -93,8 +93,8 @@ ces limites, ne les desserrez pas.
 quotidiennes » publié sur [meteo.data.gouv.fr](https://meteo.data.gouv.fr/) sous licence
 ouverte LOV2. Deux fichiers par département, sans jeton ni quota : le socle
 température-pluie et l'évapotranspiration potentielle. L'Isère entière pèse 25 Mo
-compressés, remonte à 1950 — parfois bien avant — et donne 2,7 millions de journées pour
-207 postes.
+compressés, remonte à 1950 — parfois bien avant — et donne 3 millions de journées pour
+208 postes : températures, pluie, évapotranspiration et hauteur de neige.
 
 Ces données alimentent la seule page climat et **n'entrent jamais dans un verdict** : un
 maximum quotidien n'est pas comparable à une prévision horaire, et les postes ne sont pas

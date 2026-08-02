@@ -134,6 +134,13 @@ parmi toutes celles du Poste, par son rang — il ne peut donc pas sortir de l'�
 et une sécheresse inédite apparaît comme la plus sèche connue, pas au-delà.
 _Avoid_: Année de sécheresse, épisode sec, alerte
 
+**Saison de neige**:
+Du 1er août au 31 juillet, portant le millésime de son année de départ : l'hiver
+1962-1963 est « la saison 1962 ». Se mesure par sa **durée** (jours de neige au sol) et
+son **intensité** (épaisseur maximale), qui ne se résument pas l'une l'autre. Une saison
+sans neige est conservée à zéro ; une saison trop lacunaire est écartée.
+_Avoid_: Hiver, enneigement, saison hivernale
+
 **Prolongement**:
 La même Tendance poursuivie au-delà des années mesurées. Ce n'est pas une prévision et ce n'est
 pas un scénario climatique : c'est une droite prolongée, sous l'hypothèse — que rien ne garantit —

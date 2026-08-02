@@ -1198,11 +1198,133 @@
     surRedimensionnement(etat, rendre);
   }
 
+  // ---------------------------------------------------------------------------
+  // Graphe 8 : l'enneigement, en durée et en intensité.
+  // ---------------------------------------------------------------------------
+  function grapheNeige() {
+    var racine = document.querySelector('[data-neige]');
+    var donnees = json('neige-donnees');
+    if (!racine || !donnees || !donnees.saisons.length) return;
+
+    var cadre = racine.querySelector('.viz-cadre');
+    var bulle = racine.querySelector('.viz-bulle');
+    var etat = { cadre: cadre, etroit: false };
+    var saisons = donnees.saisons;
+
+    var PANNEAUX = [
+      { cle: 'jours', titre: 'Jours de neige au sol', unite: 'j' },
+      { cle: 'epaisseur', titre: 'Épaisseur maximale', unite: 'cm' }
+    ];
+
+    function rendre() {
+      var c = cadrage(cadre, 440, 380);
+      etat.etroit = c.etroit;
+      cadre.textContent = '';
+
+      var M = c.marges;
+      var ECART = 34;
+      var largeurTrace = c.largeur - M.gauche - M.droite;
+      var hauteurPanneau = (c.hauteur - M.haut - M.bas - ECART) / PANNEAUX.length;
+      var x0 = saisons[0].saison, x1 = saisons[saisons.length - 1].saison;
+      var pas = largeurTrace / (x1 - x0 + 1);
+      function x(a) { return M.gauche + (a - x0) / (x1 - x0 + 1) * largeurTrace; }
+
+      var svg = el('svg', {
+        viewBox: '0 0 ' + c.largeur + ' ' + c.hauteur,
+        preserveAspectRatio: 'xMidYMid meet', role: 'img'
+      });
+      svg.setAttribute('aria-label',
+        'Durée et épaisseur de l’enneigement, saison après saison.');
+
+      PANNEAUX.forEach(function (p, rang) {
+        var haut = M.haut + rang * (hauteurPanneau + ECART);
+        var maxi = Math.max.apply(null, saisons.map(function (s) { return s[p.cle]; })) * 1.1 || 1;
+        function y(v) { return haut + (maxi - v) / maxi * hauteurPanneau; }
+
+        var titre = el('text', { x: M.gauche, y: haut - 6, class: 'neige-titre' });
+        titre.textContent = p.titre + ' (' + p.unite + ')';
+        svg.appendChild(titre);
+
+        graduations(0, maxi, c.etroit ? 3 : 4).forEach(function (v) {
+          svg.appendChild(el('line', {
+            x1: M.gauche, x2: c.largeur - M.droite, y1: y(v), y2: y(v), class: 'viz-grille-ligne'
+          }));
+          var t = el('text', { x: M.gauche - 8, y: y(v) + 4, class: 'viz-graduation y' });
+          t.textContent = v;
+          svg.appendChild(t);
+        });
+
+        saisons.forEach(function (s) {
+          svg.appendChild(el('rect', {
+            x: x(s.saison) + 0.5, y: y(s[p.cle]),
+            width: Math.max(1, pas - 1), height: Math.max(0, y(0) - y(s[p.cle])),
+            class: 'neige-barre'
+          }));
+        });
+
+        var t = donnees.tendances[p.cle];
+        if (t) {
+          svg.appendChild(el('path', {
+            d: chemin(t.courbe.map(function (q) {
+              return [x(q.annee) + pas / 2, y(Math.max(0, Math.min(maxi, q.valeur)))];
+            })),
+            class: 'neige-droite'
+          }));
+        }
+
+        svg.appendChild(el('line', {
+          x1: M.gauche, x2: c.largeur - M.droite, y1: y(0), y2: y(0), class: 'viz-axe-ligne'
+        }));
+      });
+
+      // Un seul axe des saisons, sous le panneau du bas : le répéter doublerait
+      // l'encombrement sans rien apprendre.
+      graduations(x0, x1, c.etroit ? 4 : 8).forEach(function (a) {
+        if (a < x0 || a > x1) return;
+        var t = el('text', {
+          x: x(a) + pas / 2, y: c.hauteur - M.bas + 18, class: 'viz-graduation x'
+        });
+        t.textContent = a;
+        svg.appendChild(t);
+      });
+
+      var survol = el('g', {});
+      svg.appendChild(survol);
+      cadre.appendChild(svg);
+
+      svg.addEventListener('pointermove', function (evt) {
+        var boite = svg.getBoundingClientRect();
+        var ratio = (evt.clientX - boite.left) / boite.width * c.largeur;
+        var i = Math.floor((ratio - M.gauche) / pas);
+        survol.textContent = '';
+        if (i < 0 || i >= saisons.length) { bulle.dataset.visible = 'false'; return; }
+        var s = saisons[i];
+        survol.appendChild(el('line', {
+          x1: x(s.saison) + pas / 2, x2: x(s.saison) + pas / 2,
+          y1: M.haut, y2: c.hauteur - M.bas, class: 'climat-curseur'
+        }));
+        remplirBulle(racine, bulle, 'Hiver ' + s.libelle, [
+          { cle: 'neige', nom: 'Jours au sol', mesure: s.jours + ' j', second: '' },
+          { cle: 'neige', nom: 'Épaisseur max', mesure: s.epaisseur + ' cm', second: '' }
+        ]);
+        placerBulle(racine, bulle, evt);
+      });
+      svg.addEventListener('pointerleave', function () {
+        survol.textContent = '';
+        bulle.dataset.visible = 'false';
+      });
+    }
+
+    rendre();
+    surRedimensionnement(etat, rendre);
+  }
+
   grapheTendance();
   grapheCycle();
   grapheSeuils();
   grapheGel();
   grapheRecords();
+  grapheNeige();
   grapheBilan();
   grapheEtats();
 })();

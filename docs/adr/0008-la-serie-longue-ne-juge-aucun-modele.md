@@ -132,6 +132,28 @@ celle affichée. La page le dit. À Monestier, les années 2020 détiennent 2,38
 part de records de chaleur et n'en ont battu aucun de froid, dans une bande de ±0,41 :
 l'approximation ne change rien à la conclusion.
 
+## L'enneigement, et un signal qui n'est pas individuel
+
+La saison de neige va du 1er août au 31 juillet. La caler sur l'année civile couperait
+chaque hiver en son milieu et mêlerait dans un même point le janvier d'un hiver et le
+décembre du suivant.
+
+Deux grandeurs, sur **deux panneaux empilés et non deux axes d'un même cadre** : la durée
+de l'enneigement se compte en jours, son intensité en centimètres, et les superposer sur
+une échelle commune serait une comparaison truquée. Le double axe est la façon la plus
+sûre de faire dire n'importe quoi à deux courbes.
+
+Le point délicat est ailleurs. **La neige varie bien plus que la température d'une année
+sur l'autre**, et cette variabilité écrase la tendance : sur les dix Postes isérois qui
+la mesurent assez longtemps, trois seulement franchissent le seuil de significativité sur
+les jours d'enneigement. Grande-Chartreuse est le plus net avec cinquante jours perdus en
+soixante-deux hivers.
+
+Publier chaque Poste isolément laisserait donc croire à l'absence d'évolution sur les
+sept autres. Or **les dix ont une pente négative** — dix signes identiques ont une chance
+sur mille de survenir par hasard. La page affiche ce fait collectif à côté du Poste
+consulté : refuser de conclure ne doit pas se confondre avec conclure à l'absence.
+
 ## Conséquences
 
 Un contributeur verra deux jeux de températures en base et voudra les réconcilier : compléter les

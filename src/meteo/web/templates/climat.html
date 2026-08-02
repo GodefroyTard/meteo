@@ -423,6 +423,89 @@
   </section>
   {% endif %}
 
+  {% if donnees_neige %}
+  <section>
+    <div class="section-cadre">
+      <h2>L'enneigement, hiver après hiver</h2>
+      <p class="assise">
+        {% set tj = donnees_neige.tendances.jours %}
+        {% set te = donnees_neige.tendances.epaisseur %}
+        {% if tj and tj.significative %}
+          À {{ serie.poste.nom_lisible }}, l'hiver a perdu
+          <em>{{ "%.0f" | format(-tj.evolution_totale) }} jours de neige au sol</em>
+          depuis {{ (donnees_neige.saisons | first).saison }}.
+        {% elif te and te.significative %}
+          À {{ serie.poste.nom_lisible }}, l'épaisseur maximale a reculé de
+          <em>{{ "%.0f" | format(-te.evolution_totale) }} cm</em> depuis
+          {{ (donnees_neige.saisons | first).saison }}.
+        {% else %}
+          À {{ serie.poste.nom_lisible }}, l'enneigement recule sans qu'on puisse
+          l'affirmer : la neige varie tellement d'un hiver à l'autre que
+          {{ donnees_neige.saisons | length }} saisons n'y suffisent pas.
+        {% endif %}
+        La saison va du 1<sup>er</sup> août au 31 juillet et porte le millésime de son
+        départ — la caler sur l'année civile couperait chaque hiver en son milieu.
+      </p>
+      <p class="assise">
+        Deux panneaux plutôt qu'un seul axe : la durée de l'enneigement et son épaisseur
+        ne se résument pas l'une l'autre, et des jours ne se superposent pas à des
+        centimètres.
+      </p>
+
+      <div class="viz neige" data-neige>
+        <div class="viz-cadre">
+          <p class="viz-vide">
+            Le graphe demande JavaScript. Les valeurs restent lisibles dans le tableau
+            ci-dessous.
+          </p>
+        </div>
+        <div class="viz-bulle" role="status" aria-live="polite" data-visible="false"></div>
+
+        <details class="viz-tableau">
+          <summary>Voir les hivers</summary>
+          <div class="defilable">
+            <table>
+              <thead>
+                <tr>
+                  <th>Hiver</th><th>Jours au sol</th><th>Épaisseur max</th>
+                  <th>1<sup>re</sup> neige</th><th>Dernière</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for s in donnees_neige.saisons | reverse %}
+                  <tr>
+                    <td>{{ s.libelle }}</td>
+                    <td>{{ s.jours }}</td>
+                    <td>{{ s.epaisseur }} cm</td>
+                    <td>{{ s.premiere[8:10] ~ "/" ~ s.premiere[5:7] if s.premiere else "—" }}</td>
+                    <td>{{ s.derniere[8:10] ~ "/" ~ s.derniere[5:7] if s.derniere else "—" }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <script type="application/json" id="neige-donnees">{{ donnees_neige | tojson }}</script>
+      </div>
+
+      <p class="assise mention">
+        La hauteur de neige est relevée toute l'année : un zéro de juillet est une mesure,
+        pas une absence. Une saison comptant moins de 300 jours mesurés est écartée plutôt
+        qu'extrapolée — un hiver relevé à moitié afficherait mécaniquement moins de jours
+        d'enneigement et dessinerait un recul là où il n'y a qu'un trou.
+      </p>
+      <p class="assise mention">
+        La neige varie bien plus que la température d'une année sur l'autre. En Isère,
+        deux postes sur trois n'atteignent pas la significativité sur les jours
+        d'enneigement — mais <strong>les dix postes mesurés ont tous une pente
+        négative</strong>. Dix signes identiques ont une chance sur mille de survenir par
+        hasard : le recul est collectif avant d'être démontrable poste par poste.
+      </p>
+    </div>
+  </section>
+  {% endif %}
+
   {% if donnees_secheresse %}
   {% set sec = donnees_secheresse %}
   {% set mois_saison = noms_mois_complets[sec.mois[0] - 1] ~ " à " ~ noms_mois_complets[sec.mois[1] - 1] %}

@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import Date, cast, distinct, extract, func, select
 
-from meteo.domaine import cycle, indicateurs, qualite, secheresse, tendance
+from meteo.domaine import cycle, indicateurs, neige, qualite, secheresse, tendance
 from meteo.domaine.modeles import PAR_CLE
 from meteo.domaine.rattachement import COUT_MAXIMAL_CLIMAT_KM, Rattachement, rattacher
 from meteo.domaine.saison import Saison, heures_attendues, mois_de
@@ -415,6 +415,7 @@ class PosteResume:
     annees_pleines: int
     annees_pluie: int
     annees_etp: int
+    annees_neige: int
     source_etp: str | None
 
     @property
@@ -509,6 +510,19 @@ class SerieSecheresse:
 
 
 @dataclass(frozen=True)
+class SerieNeige:
+    """L'enneigement d'un Poste, saison après saison.
+
+    Deux tendances et non une : la durée et l'intensité de l'enneigement ne se
+    résument pas l'une l'autre, et n'ont pas la même unité.
+    """
+
+    saisons: tuple[neige.SaisonNeige, ...]
+    tendance_jours: tendance.Tendance | None
+    tendance_epaisseur: tendance.Tendance | None
+
+
+@dataclass(frozen=True)
 class DossierClimat:
     """Tout ce que la page climat montre d'un Poste, chargé en une fois."""
 
@@ -518,6 +532,7 @@ class DossierClimat:
     franchissements: tuple[SerieFranchissement, ...]
     gel: SerieGel
     records: SerieRecords
+    neige: SerieNeige | None
     secheresse: SerieSecheresse | None
     """None quand le Poste n'a pas d'évapotranspiration exploitable — deux Postes sur
     trois en Isère. On préfère l'absence de section à une section approximative."""
@@ -535,6 +550,7 @@ def _resume_poste(p: Poste) -> PosteResume:
         annees_pleines=p.annees_pleines,
         annees_pluie=p.annees_pluie,
         annees_etp=p.annees_etp,
+        annees_neige=p.annees_neige,
         source_etp=p.source_etp,
     )
 
@@ -591,6 +607,8 @@ def _series_completes(s, poste_numero: str, source_etp: str | None):
             Journee.rr_mm,
             Journee.etp_monteith_mm,
             Journee.etp_grille_mm,
+            Journee.neige_cm,
+            Journee.neige_fraiche_cm,
         ).where(Journee.poste_numero == poste_numero)
     ).all()
 
@@ -600,6 +618,8 @@ def _series_completes(s, poste_numero: str, source_etp: str | None):
         {r.jour: r.tx_c for r in lignes if r.tx_c is not None},
         {r.jour: r.rr_mm for r in lignes if r.rr_mm is not None},
         {r.jour: getattr(r, colonne) for r in lignes if getattr(r, colonne) is not None},
+        {r.jour: r.neige_cm for r in lignes if r.neige_cm is not None},
+        {r.jour: r.neige_fraiche_cm for r in lignes if r.neige_fraiche_cm is not None},
     )
 
 
@@ -679,6 +699,20 @@ def _gel(minima) -> SerieGel:
     )
 
 
+def _neige(hauteurs, fraiches) -> SerieNeige | None:
+    """L'enneigement, ou rien si le Poste ne relève pas la hauteur de neige."""
+    if not hauteurs:
+        return None
+    saisons = neige.saisons(hauteurs, fraiches)
+    if not saisons:
+        return None
+    return SerieNeige(
+        saisons=tuple(saisons),
+        tendance_jours=_pente([(s.saison, float(s.jours_au_sol)) for s in saisons]),
+        tendance_epaisseur=_pente([(s.saison, s.epaisseur_max_cm) for s in saisons]),
+    )
+
+
 def _secheresse(resume: PosteResume, pluie, etp) -> SerieSecheresse | None:
     """Le bilan hydrique estival, ou rien.
 
@@ -738,7 +772,9 @@ def dossier(poste_numero: str, mois: int, jour: int) -> DossierClimat | None:
         if poste is None:
             return None
         resume = _resume_poste(poste)
-        minima, maxima, pluie, etp = _series_completes(s, poste_numero, poste.source_etp)
+        (minima, maxima, pluie, etp, hauteurs, fraiches) = _series_completes(
+            s, poste_numero, poste.source_etp
+        )
 
     return DossierClimat(
         poste=resume,
@@ -747,5 +783,6 @@ def dossier(poste_numero: str, mois: int, jour: int) -> DossierClimat | None:
         franchissements=_franchissements(minima, maxima),
         gel=_gel(minima),
         records=_records(minima, maxima),
+        neige=_neige(hauteurs, fraiches),
         secheresse=_secheresse(resume, pluie, etp),
     )

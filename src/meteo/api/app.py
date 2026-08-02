@@ -22,7 +22,7 @@ from meteo.collecte.open_meteo import (
     previsions_courantes,
     qualite_air,
 )
-from meteo.domaine import conditions, cycle, indicateurs, secheresse, tendance
+from meteo.domaine import conditions, cycle, indicateurs, neige, secheresse, tendance
 from meteo.domaine.modeles import ANTICIPATION_MAX, CATALOGUE, PAR_CLE
 from meteo.domaine.saison import Saison, saison_de
 from meteo.domaine.temps import INCONNU, temps_de
@@ -830,6 +830,34 @@ def _serie_tendance(t, debut: int, fin: int, decimales: int = 2) -> dict | None:
     }
 
 
+def _serie_neige(n) -> dict | None:
+    """L'enneigement saison après saison, avec ses deux tendances.
+
+    Deux grandeurs d'unités différentes : le graphe les met sur deux panneaux empilés
+    plutôt que sur un axe partagé, qui serait une comparaison truquée.
+    """
+    if n is None or not n.saisons:
+        return None
+    debut, fin = n.saisons[0].saison, n.saisons[-1].saison
+    return {
+        "saisons": [
+            {
+                "saison": s.saison,
+                "libelle": s.libelle,
+                "jours": s.jours_au_sol,
+                "epaisseur": round(s.epaisseur_max_cm),
+                "premiere": s.premiere.isoformat() if s.premiere else None,
+                "derniere": s.derniere.isoformat() if s.derniere else None,
+            }
+            for s in n.saisons
+        ],
+        "tendances": {
+            "jours": _serie_tendance(n.tendance_jours, debut, fin, decimales=1),
+            "epaisseur": _serie_tendance(n.tendance_epaisseur, debut, fin, decimales=1),
+        },
+    }
+
+
 def _serie_secheresse(s) -> dict | None:
     """Le bilan hydrique estival et l'état standardisé de chaque saison."""
     if s is None or not s.bilans:
@@ -1091,6 +1119,9 @@ def climat(
             "donnees_gel": _serie_gel(dossier.gel) if dossier else None,
             "records": dossier.records if dossier else None,
             "donnees_records": _serie_records(dossier.records) if dossier else None,
+            "neige": dossier.neige if dossier else None,
+            "donnees_neige": _serie_neige(dossier.neige) if dossier else None,
+            "mois_saison_neige": neige.MOIS_DEBUT_SAISON,
             "secheresse": dossier.secheresse if dossier else None,
             "donnees_secheresse": _serie_secheresse(dossier.secheresse) if dossier else None,
             "noms_mois_complets": list(_NOMS_MOIS),

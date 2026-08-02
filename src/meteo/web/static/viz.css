@@ -443,3 +443,24 @@
 
 .viz.secheresse .cle.apport { background: var(--humide); }
 .viz.secheresse .cle.demande { background: var(--sec); }
+
+/* ---------------------------------------------------------------------------
+   Neige : durée et intensité de l'enneigement, sur deux panneaux empilés.
+
+   Deux panneaux et non deux axes sur un même cadre : des jours et des
+   centimètres ne se superposent pas, et un double axe est la façon la plus
+   sûre de faire dire n'importe quoi à deux courbes.
+
+   Une seule teinte, celle déjà employée pour le froid ailleurs sur la page —
+   les minima, le gel, les records de froid. La neige appartient à la même
+   famille, et lui donner une couleur propre ferait croire à un autre sujet. */
+.viz.neige { --neige: #2f6cad; }
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz.neige { --neige: #5695d8; }
+}
+:root[data-theme="dark"] .viz.neige { --neige: #5695d8; }
+
+.neige-barre { fill: var(--neige); opacity: .55; }
+.neige-droite { fill: none; stroke: var(--neige); stroke-width: 2.6; stroke-linecap: round; }
+.neige-titre { fill: var(--viz-ink-2); font-size: 12px; font-weight: 600; }
