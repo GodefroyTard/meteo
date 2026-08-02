@@ -137,15 +137,31 @@ class Poste(Base):
     premiere_annee: Mapped[int] = mapped_column(SmallInteger)
     derniere_annee: Mapped[int] = mapped_column(SmallInteger)
     annees_pleines: Mapped[int] = mapped_column(SmallInteger)
-    """Nombre d'années comptant au moins SEUIL_ANNEE_PLEINE jours mesurés."""
+    """Nombre d'années comptant au moins SEUIL_ANNEE_PLEINE jours de température."""
+
+    annees_pluie: Mapped[int] = mapped_column(SmallInteger, default=0)
+    annees_etp: Mapped[int] = mapped_column(SmallInteger, default=0)
+    """Couvertures distinctes de celle des températures : beaucoup de Postes sont
+    purement pluviométriques, et l'évapotranspiration n'existe que sur une minorité."""
+
+    source_etp: Mapped[str | None] = mapped_column(String(10))
+    """« monteith » ou « grille », ou None si le Poste n'a pas d'évapotranspiration
+    exploitable. Le choix se fait à l'ingestion, une fois toutes les Journées écrites :
+    Monteith est préférée partout où elle couvre assez d'années, car elle est calculée
+    depuis les mesures du Poste là où la grille vient d'une analyse (ADR 0009)."""
 
 
 class Journee(Base):
-    """Un jour mesuré par un Poste : le minimum et le maximum de la journée.
+    """Un jour mesuré par un Poste : ses extrêmes, sa pluie, sa demande évaporative.
 
     Les valeurs douteuses de Météo-France (codes qualité 0 et 2) sont écartées à
     l'ingestion et n'arrivent jamais ici : une Journée présente est une Journée
-    exploitable.
+    exploitable. Toutes les colonnes sont indépendamment nullables — beaucoup de
+    Postes ne mesurent que la pluie, et l'évapotranspiration est rare.
+
+    Les deux évapotranspirations cohabitent parce qu'elles ne valent pas la même
+    chose : `etp_monteith_mm` est calculée depuis les mesures du Poste, `etp_grille_mm`
+    est interpolée sur une grille. Le Poste dit laquelle il retient.
     """
 
     __tablename__ = "journee"
@@ -156,3 +172,6 @@ class Journee(Base):
     jour: Mapped[date] = mapped_column(Date, primary_key=True)
     tn_c: Mapped[float | None] = mapped_column(REAL)
     tx_c: Mapped[float | None] = mapped_column(REAL)
+    rr_mm: Mapped[float | None] = mapped_column(REAL)
+    etp_monteith_mm: Mapped[float | None] = mapped_column(REAL)
+    etp_grille_mm: Mapped[float | None] = mapped_column(REAL)

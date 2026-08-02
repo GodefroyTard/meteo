@@ -21,7 +21,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from meteo.collecte.climatologie import ClientClimatologie, JourneeMesuree
 from meteo.config import config
-from meteo.domaine.tendance import JOURS_ANNEE_PLEINE
+from meteo.domaine.tendance import ANNEES_MINIMUM, JOURS_ANNEE_PLEINE
 from meteo.stockage.session import session
 from meteo.stockage.tables import Journee, Poste
 
@@ -48,20 +48,31 @@ def _ligne_poste(j: JourneeMesuree) -> dict:
     }
 
 
+MESURES = ("tn_c", "tx_c", "rr_mm", "etp_monteith_mm", "etp_grille_mm")
+
+
 def _ligne_journee(j: JourneeMesuree) -> dict:
+    """Toutes les colonnes de mesure, y compris celles que la passe ne remplit pas.
+
+    Elles valent alors None, ce qui n'est utilisé qu'à l'insertion d'une Journée
+    nouvelle : sur une Journée existante, seules les colonnes de la passe sont
+    réécrites, et le reste survit intact.
+    """
     return {
         "poste_numero": j.poste_numero,
         "jour": j.jour,
-        "tn_c": j.tn_c,
-        "tx_c": j.tx_c,
+        **{champ: getattr(j, champ) for champ in MESURES},
     }
 
 
-def _charger_departement(client: ClientClimatologie, departement: str) -> tuple[int, int]:
+def _charger_flux(
+    journees: Iterable[JourneeMesuree], colonnes: tuple[str, ...]
+) -> tuple[int, set[str]]:
+    """Écrit un flux de Journées, en ne réécrivant que les colonnes de sa famille."""
     connus: set[str] = set()
     total = 0
     with session() as s:
-        for paquet in _par_paquets(client.journees(departement), TAILLE_LOT):
+        for paquet in _par_paquets(journees, TAILLE_LOT):
             nouveaux = {j.poste_numero: j for j in paquet if j.poste_numero not in connus}
             if nouveaux:
                 requete = insert(Poste)
@@ -83,47 +94,94 @@ def _charger_departement(client: ClientClimatologie, departement: str) -> tuple[
             s.execute(
                 requete.on_conflict_do_update(
                     index_elements=["poste_numero", "jour"],
-                    set_={c: getattr(requete.excluded, c) for c in ("tn_c", "tx_c")},
+                    set_={c: getattr(requete.excluded, c) for c in colonnes},
                 ),
                 [_ligne_journee(j) for j in paquet],
             )
             s.commit()
             total += len(paquet)
-    return total, len(connus)
+    return total, connus
+
+
+def _charger_departement(client: ClientClimatologie, departement: str) -> tuple[int, int]:
+    """Deux passes : le socle température-pluie, puis l'évapotranspiration.
+
+    L'ordre compte peu — les deux passes se rejoignent sur la clé (Poste, jour) et
+    n'écrivent que leurs propres colonnes — mais celui-ci met le socle en place le
+    premier, ce qui rend les journaux plus lisibles quand la seconde passe échoue.
+    """
+    total, connus = _charger_flux(client.journees(departement), ("tn_c", "tx_c", "rr_mm"))
+    autres, aussi = _charger_flux(
+        client.evapotranspirations(departement), ("etp_monteith_mm", "etp_grille_mm")
+    )
+    return total + autres, len(connus | aussi)
 
 
 def _recalculer_couverture() -> int:
-    """Réécrit les statistiques de couverture de chaque Poste depuis les Journées."""
+    """Réécrit les statistiques de couverture de chaque Poste depuis les Journées.
+
+    Quatre couvertures et non une : température, pluie et les deux évapotranspirations
+    ne vont pas ensemble. Un Poste peut avoir un siècle de pluie et vingt ans de
+    température, ou l'inverse ; les confondre ferait promettre à la page des graphes
+    qu'elle ne saurait pas dessiner.
+
+    Le comptage se fait en base et l'arbitrage en Python : agréger des comptages
+    d'années par Poste tient en treize mille lignes, et le choix de la source
+    d'évapotranspiration se lit mieux en une expression qu'en trois sous-requêtes.
+    """
     annee = cast(extract("year", Journee.jour), Integer).label("annee")
+    compte = lambda condition: func.count().filter(condition)  # noqa: E731
     par_annee = (
-        select(Journee.poste_numero, annee, func.count().label("jours"))
-        .where(Journee.tx_c.is_not(None) | Journee.tn_c.is_not(None))
+        select(
+            Journee.poste_numero,
+            annee,
+            compte(Journee.tn_c.is_not(None) | Journee.tx_c.is_not(None)).label("temp"),
+            compte(Journee.rr_mm.is_not(None)).label("pluie"),
+            compte(Journee.etp_monteith_mm.is_not(None)).label("monteith"),
+            compte(Journee.etp_grille_mm.is_not(None)).label("grille"),
+        )
         .group_by(Journee.poste_numero, annee)
         .subquery()
     )
-    par_poste = select(
-        par_annee.c.poste_numero,
-        func.min(par_annee.c.annee).label("premiere"),
-        func.max(par_annee.c.annee).label("derniere"),
-        func.count()
-        .filter(par_annee.c.jours >= JOURS_ANNEE_PLEINE)
-        .label("pleines"),
-    ).group_by(par_annee.c.poste_numero)
 
     with session() as s:
-        lignes = s.execute(par_poste).all()
+        lignes = s.execute(select(par_annee)).all()
+        par_poste: dict[str, dict] = {}
         for ligne in lignes:
+            etat = par_poste.setdefault(
+                ligne.poste_numero,
+                {"premiere": ligne.annee, "derniere": ligne.annee,
+                 "temp": 0, "pluie": 0, "monteith": 0, "grille": 0},
+            )
+            etat["premiere"] = min(etat["premiere"], ligne.annee)
+            etat["derniere"] = max(etat["derniere"], ligne.annee)
+            for cle in ("temp", "pluie", "monteith", "grille"):
+                if getattr(ligne, cle) >= JOURS_ANNEE_PLEINE:
+                    etat[cle] += 1
+
+        for numero, etat in par_poste.items():
+            # Monteith d'abord partout où elle suffit : elle vient des mesures du
+            # Poste, la grille d'une analyse (ADR 0009).
+            if etat["monteith"] >= ANNEES_MINIMUM:
+                source, annees_etp = "monteith", etat["monteith"]
+            elif etat["grille"] >= ANNEES_MINIMUM:
+                source, annees_etp = "grille", etat["grille"]
+            else:
+                source, annees_etp = None, 0
             s.execute(
                 update(Poste)
-                .where(Poste.numero == ligne.poste_numero)
+                .where(Poste.numero == numero)
                 .values(
-                    premiere_annee=ligne.premiere,
-                    derniere_annee=ligne.derniere,
-                    annees_pleines=ligne.pleines,
+                    premiere_annee=etat["premiere"],
+                    derniere_annee=etat["derniere"],
+                    annees_pleines=etat["temp"],
+                    annees_pluie=etat["pluie"],
+                    annees_etp=annees_etp,
+                    source_etp=source,
                 )
             )
         s.commit()
-    return len(lignes)
+    return len(par_poste)
 
 
 def charger(departements: list[str] | None = None) -> dict:
