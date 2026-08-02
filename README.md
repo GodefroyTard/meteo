@@ -66,6 +66,12 @@ restent disponibles pour un déclenchement manuel, avec leur garde-fou de 30 min
 de calculer des statistiques rétroactivement au lieu d'attendre des mois de collecte.
 L'archive démarre le 20/01/2024 (AROME, ICON-D2) et le 04/02/2024 (ECMWF).
 
+Sept modèles sont suivis, dont **AIFS**, le modèle par apprentissage d'ECMWF. Ses runs
+passés n'étant archivés que depuis mars 2025, il ne rejoint pas le peloton principal —
+il tronquerait l'historique de tous les autres. Il est classé à part, sur la fenêtre où
+il existe, avec un avertissement disant que ses chiffres ne s'y comparent pas
+([ADR 0010](docs/adr/0010-un-modele-plus-jeune-ne-rejoint-pas-le-peloton.md)).
+
 **Infoclimat** fournit les observations, via le réseau participatif StatIC.
 
 Pour obtenir le jeton : créer un compte sur

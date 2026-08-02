@@ -6,9 +6,13 @@ from datetime import UTC, date, datetime, timedelta
 from sqlalchemy import Date, cast, distinct, extract, func, select
 
 from meteo.domaine import cycle, indicateurs, neige, qualite, secheresse, tendance
-from meteo.domaine.modeles import PAR_CLE
+from meteo.domaine.modeles import (
+    PAR_CLE,
+    debut_fenetre_recente,  # noqa: F401 — réexport
+)
 from meteo.domaine.rattachement import COUT_MAXIMAL_CLIMAT_KM, Rattachement, rattacher
 from meteo.domaine.saison import Saison, heures_attendues, mois_de
+from meteo.domaine.verdict import PERIMETRE_COMPLET
 from meteo.lots.verdicts import periode_observee
 from meteo.stockage.session import session
 from meteo.stockage.tables import Journee, Observation, Poste, Prevision, Station, Verdict
@@ -38,6 +42,7 @@ class LigneVerdict:
 
 @dataclass(frozen=True)
 class CaseVerdict:
+    perimetre: str
     station_code: str
     station_nom: str
     variable: str
@@ -71,9 +76,18 @@ def rattachement(latitude: float, longitude: float, altitude: float) -> Rattache
 
 
 def case(
-    station_code: str, variable: str, anticipation: int, saison: Saison
+    station_code: str,
+    variable: str,
+    anticipation: int,
+    saison: Saison,
+    perimetre: str = PERIMETRE_COMPLET,
 ) -> CaseVerdict | None:
-    """Le Verdict d'une case, ou None si elle n'a pas été publiée."""
+    """Le Verdict d'une case, ou None si elle n'a pas été publiée.
+
+    Le périmètre choisit lequel des deux classements on lit : celui de toute la
+    période, ou celui de la fenêtre où les Modèles récents existent aussi. Ils ne se
+    comparent pas, et c'est à l'appelant de le dire à son lecteur (ADR 0010).
+    """
     with session() as s:
         station = s.get(Station, station_code)
         if station is None:
@@ -86,6 +100,7 @@ def case(
                     Verdict.variable == variable,
                     Verdict.anticipation == anticipation,
                     Verdict.saison == str(saison),
+                    Verdict.perimetre == perimetre,
                 )
                 .order_by(Verdict.rang)
             ).scalars()
@@ -95,6 +110,7 @@ def case(
         return None
 
     return CaseVerdict(
+        perimetre=perimetre,
         station_code=station_code,
         station_nom=station.nom,
         variable=variable,

@@ -26,6 +26,14 @@ from dataclasses import dataclass
 
 import numpy as np
 
+PERIMETRE_COMPLET = "complet"
+"""Toute la période observée, avec les seuls Modèles archivés depuis le début."""
+
+PERIMETRE_RECENT = "recent"
+"""La fenêtre où tous les Modèles existent, nouveaux venus compris. Ses chiffres ne se
+comparent pas à ceux du périmètre complet : ni la période, ni le peloton ne sont les
+mêmes (ADR 0010)."""
+
 SEUIL_PLUIE_MM = 0.2
 """Hauteur horaire à partir de laquelle on considère qu'il a plu.
 

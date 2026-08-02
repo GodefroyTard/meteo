@@ -68,12 +68,22 @@ def previsions(debut: date | None = None, fin: date | None = None) -> int:
     try:
         for station in suivies():
             for modele in CATALOGUE:
+                # Un Modèle plus jeune que la période demandée n'a rien à répondre
+                # avant sa date d'archive : demander quand même reviendrait à faire
+                # traverser à l'API des mois qu'elle ne peut pas servir, à chaque
+                # passage du lot.
+                depuis = debut
+                if modele.debut_archive is not None:
+                    depuis = max(debut, modele.debut_archive)
+                    if depuis > fin:
+                        continue
+
                 valeurs = client.previsions(
                     latitude=station.latitude,
                     longitude=station.longitude,
                     altitude=station.altitude,
                     modele=modele,
-                    debut=debut,
+                    debut=depuis,
                     fin=fin,
                 )
                 total += _enregistrer(

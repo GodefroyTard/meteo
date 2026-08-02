@@ -49,7 +49,7 @@
           {% if case.vainqueurs | length == 1 %}croyez {% endif %}
           {%- for ligne in case.lignes if ligne.ex_aequo -%}
             {%- if not loop.first %}{{ " et " if loop.last else ", " }}{% endif -%}
-            <em><span class="pastille s{{ teintes[ligne.modele] }}" aria-hidden="true"></span>{{
+            <em><span class="pastille {{ teintes[ligne.modele] }}" aria-hidden="true"></span>{{
               ligne.nom_modele }}</em>
           {%- endfor -%}
           {{ " se valent." if case.vainqueurs | length > 1 else "." }}
@@ -76,7 +76,7 @@
             {% for ligne in case.lignes %}
               <tr class="{{ 'gagnant' if ligne.ex_aequo }}">
                 <td>
-                  <span class="pastille s{{ teintes[ligne.modele] }}" aria-hidden="true"></span>
+                  <span class="pastille {{ teintes[ligne.modele] }}" aria-hidden="true"></span>
                   {{ ligne.nom_modele }}
                   {% if ligne.ex_aequo and case.vainqueurs | length > 1 %}
                     <span class="marque">ex aequo</span>
@@ -115,6 +115,80 @@
         {% endif %}
       {% endif %}
     </div>
+
+    {% if case_recent and noms_recents %}
+      {# Second classement, jamais fondu dans le premier : ni la période ni le peloton
+         ne sont les mêmes. Les fusionner tronquerait l'historique de tous les modèles
+         à la naissance du plus jeune (ADR 0010). #}
+      <div class="verdict a-part">
+        <p class="avertissement" role="note">
+          <svg class="icone" aria-hidden="true"><use href="#i-ecart"></use></svg>
+          <span>
+            <strong>Chiffres non comparables à ceux du tableau ci-dessus.</strong>
+            {{ noms_recents | join(" et ") }}
+            {{ "n'est archivé" if noms_recents | length == 1 else "ne sont archivés" }}
+            que depuis {{ debut_recent.strftime("%m/%Y") }}. Ce second classement porte
+            donc sur une période plus courte, et sur tous les modèles à la fois. Un
+            écart moyen n'y vaut que face aux autres écarts de ce même tableau.
+          </span>
+        </p>
+
+        {% set plusieurs = case_recent.vainqueurs | length > 1 %}
+        <p class="reponse">
+          Sur cette fenêtre, {{ "" if plusieurs else "c'est " }}
+          {%- for ligne in case_recent.lignes if ligne.ex_aequo -%}
+            {%- if not loop.first %}{{ " et " if loop.last else ", " }}{% endif -%}
+            <em><span class="pastille {{ teintes[ligne.modele] }}" aria-hidden="true"></span>{{
+              ligne.nom_modele }}</em>
+          {%- endfor -%}
+          {{ " se valent." if plusieurs else " qui se trompe le moins." }}
+        </p>
+        <p class="assise">
+          Sur {{ case_recent.nb_heures }} heures mesurées réparties sur
+          {{ case_recent.nb_jours }} jours
+          ({{ (case_recent.couverture * 100) | round | int }} % de couverture de la fenêtre).
+        </p>
+
+        <div class="defilable">
+          <table>
+            <thead>
+              <tr>
+                <th>Modèle</th>
+                {% if variable == "temperature" %}
+                  <th>Écart moyen</th><th>Biais</th>
+                {% else %}
+                  <th>Taux d'erreur</th><th>Fausses alertes</th><th>Pluies manquées</th>
+                {% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for ligne in case_recent.lignes %}
+                <tr class="{{ 'gagnant' if ligne.ex_aequo }}">
+                  <td>
+                    <span class="pastille {{ teintes[ligne.modele] }}" aria-hidden="true"></span>
+                    {{ ligne.nom_modele }}
+                    {%- if ligne.nom_modele in noms_recents %}
+                      <span class="marque">nouveau</span>
+                    {%- endif %}
+                    {% if ligne.ex_aequo and case_recent.vainqueurs | length > 1 %}
+                      <span class="marque">ex aequo</span>
+                    {% endif %}
+                  </td>
+                  {% if variable == "temperature" %}
+                    <td>{{ "%.2f" | format(ligne.ecart_moyen) }} °C</td>
+                    <td>{{ "%+.2f" | format(ligne.biais) }} °C</td>
+                  {% else %}
+                    <td>{{ (ligne.ecart_moyen * 100) | round(1) }} %</td>
+                    <td>{{ (ligne.fausses_alertes * 100) | round(1) if ligne.fausses_alertes is not none else "—" }} %</td>
+                    <td>{{ (ligne.pluies_manquees * 100) | round(1) if ligne.pluies_manquees is not none else "—" }} %</td>
+                  {% endif %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% endif %}
   </section>
 
   <section>

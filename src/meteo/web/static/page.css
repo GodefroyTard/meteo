@@ -881,3 +881,25 @@ footer a { color: var(--encre-2); }
   text-transform: none;
   opacity: .72;
 }
+
+/* Un modèle trop jeune pour le peloton principal : pastille creuse. Distinct par la
+   forme et non par la couleur — lui donner une septième teinte le ferait passer pour
+   un pair, alors que ses chiffres ne se comparent pas aux autres (ADR 0010). */
+.pastille.nouveau {
+  background: transparent;
+  border: 2px solid var(--encre-2, currentColor);
+  box-sizing: border-box;
+}
+
+/* Second classement : détaché du premier, et précédé de ce qui le rend lisible. */
+.verdict.a-part { margin-top: 1.6rem; }
+
+.verdict .avertissement {
+  display: flex; align-items: flex-start; gap: .6rem;
+  margin: 0 0 1rem; padding: .8rem .9rem;
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in oklab, var(--accent) 32%, transparent);
+  font-size: .86rem; line-height: 1.45;
+}
+.verdict .avertissement .icone { flex: 0 0 auto; width: 20px; height: 20px; margin-top: .1rem; }

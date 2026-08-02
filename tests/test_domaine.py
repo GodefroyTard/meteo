@@ -17,7 +17,13 @@ from meteo.domaine.conditions import (
     uv,
     vent,
 )
-from meteo.domaine.modeles import CATALOGUE, modeles_couvrant
+from meteo.domaine.modeles import (
+    CATALOGUE,
+    debut_fenetre_recente,
+    etablis,
+    modeles_couvrant,
+    nouveaux,
+)
 from meteo.domaine.rattachement import COUT_MAXIMAL_KM, distance_km, rattacher
 from meteo.domaine.saison import Saison, saison_de
 from meteo.domaine.temps import NON_ANNONCE, pleut, temps_de
@@ -44,12 +50,34 @@ class TestSaison:
 class TestPortee:
     def test_le_peloton_se_reduit_avec_l_anticipation(self):
         assert len(modeles_couvrant(1)) == len(CATALOGUE)
-        assert {m.nom for m in modeles_couvrant(7)} == {"ECMWF", "GFS"}
+        assert {m.nom for m in modeles_couvrant(7)} == {"ECMWF", "GFS", "AIFS"}
 
     def test_arome_ne_court_pas_au_dela_d_un_jour(self):
         arome = next(m for m in CATALOGUE if m.nom == "AROME")
         assert arome.couvre(1)
         assert not arome.couvre(2)
+
+
+class TestPeloton:
+    def test_les_etablis_n_ont_pas_de_date_d_archive(self):
+        assert all(m.debut_archive is None for m in etablis())
+        assert {m.nom for m in etablis()} | {m.nom for m in nouveaux()} == {
+            m.nom for m in CATALOGUE
+        }
+
+    def test_aifs_est_un_nouveau_venu(self):
+        # Ses runs passés ne sont archivés que depuis mars 2025 : le verser dans le
+        # peloton principal tronquerait l'historique de tous les autres.
+        (aifs,) = nouveaux()
+        assert aifs.nom == "AIFS"
+        assert aifs.debut_archive == date(2025, 3, 1)
+
+    def test_la_fenetre_recente_part_du_plus_jeune(self):
+        assert debut_fenetre_recente() == max(m.debut_archive for m in nouveaux())
+
+    def test_sans_nouveau_venu_il_n_y_a_pas_de_seconde_fenetre(self):
+        # Le second classement n'existe que s'il y a quelqu'un à y comparer.
+        assert (debut_fenetre_recente() is None) == (len(nouveaux()) == 0)
 
 
 class TestRattachement:

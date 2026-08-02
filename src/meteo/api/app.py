@@ -24,10 +24,16 @@ from meteo.collecte.open_meteo import (
     qualite_air,
 )
 from meteo.domaine import conditions, cycle, indicateurs, neige, secheresse, tendance
-from meteo.domaine.modeles import ANTICIPATION_MAX, CATALOGUE, PAR_CLE
+from meteo.domaine.modeles import (
+    ANTICIPATION_MAX,
+    CATALOGUE,
+    PAR_CLE,
+    etablis,
+    nouveaux,
+)
 from meteo.domaine.saison import Saison, saison_de
 from meteo.domaine.temps import INCONNU, temps_de
-from meteo.domaine.verdict import SEUIL_PLUIE_MM
+from meteo.domaine.verdict import PERIMETRE_RECENT, SEUIL_PLUIE_MM
 from meteo.lots import rafraichissement
 from meteo.lots.verdicts import PLUIE, TEMPERATURE
 
@@ -48,6 +54,13 @@ app.mount("/static", StaticFiles(directory=str(_WEB / "static")), name="static")
 gabarits.env.filters["quantieme"] = lambda rang: _date_du_quantieme(rang)
 
 VARIABLES = (TEMPERATURE, PLUIE)
+
+
+def _teintes() -> dict[str, str]:
+    """La classe CSS de pastille de chaque Modèle, par sa clé Open-Meteo."""
+    classes = {m.cle: f"s{i + 1}" for i, m in enumerate(etablis())}
+    classes.update({m.cle: "nouveau" for m in nouveaux()})
+    return classes
 
 
 def _saison(valeur: str | None) -> Saison:
@@ -779,6 +792,13 @@ def fiabilite(
     saison_choisie = _saison(saison)
 
     case = lecture.case(choisie, variable, anticipation, saison_choisie) if choisie else None
+    # Second classement : la fenêtre où les Modèles récents existent aussi. Publié à
+    # part, jamais fondu dans le premier — ni la période ni le peloton ne sont les mêmes.
+    case_recent = (
+        lecture.case(choisie, variable, anticipation, saison_choisie, PERIMETRE_RECENT)
+        if choisie
+        else None
+    )
     # Le graphe est restreint à la saison et à la variable du verdict : il doit le justifier.
     v = (
         lecture.verification(choisie, anticipation, jours, saison_choisie, variable)
@@ -814,8 +834,15 @@ def fiabilite(
             "manque": raison,
             "verification": v,
             "donnees": _serialiser(v),
-            # Le rang du Modèle dans le catalogue, qui lui attribue sa teinte (ADR 0006).
-            "teintes": {m.cle: i + 1 for i, m in enumerate(CATALOGUE)},
+            # La classe de pastille de chaque Modèle. Les six Modèles établis prennent
+            # les six teintes de la palette validée (ADR 0006) ; un nouveau venu prend
+            # une pastille creuse, distincte par la forme et non par la couleur. Lui
+            # donner une septième teinte le ferait passer pour un pair, alors que ses
+            # chiffres ne se comparent pas aux autres (ADR 0010).
+            "teintes": _teintes(),
+            "case_recent": case_recent,
+            "debut_recent": lecture.debut_fenetre_recente(),
+            "noms_recents": [m.nom for m in nouveaux()],
         },
     )
 

@@ -43,6 +43,21 @@ vise. Varie de 1 à 7. Ce n'est pas un horizon en heures : l'écart réel entre 
 et l'instant visé n'est pas connu.
 _Avoid_: Horizon, échéance, lead time, délai
 
+**Périmètre**:
+La paire (période, peloton) sur laquelle un Verdict est calculé. Deux périmètres
+cohabitent : **complet**, toute la période observée avec les seuls Modèles archivés
+depuis le début — c'est lui qui fait foi — et **récent**, la fenêtre où les nouveaux
+venus existent aussi, avec tout le monde. Leurs chiffres ne se comparent jamais entre
+eux, et tout affichage du second doit le dire (ADR 0010).
+_Avoid_: Scope, sous-ensemble, filtre
+
+**Nouveau venu**:
+Un Modèle dont les runs passés ne sont archivés que depuis une date postérieure au début
+de la période observée — AIFS depuis mars 2025. Il ne rejoint pas le peloton principal :
+l'alignement n'ayant lieu qu'aux instants où tous ont une valeur, il tronquerait
+l'historique de tous les autres à sa propre date de naissance.
+_Avoid_: Modèle expérimental, modèle IA, beta
+
 **Portée**:
 L'Anticipation maximale au-delà de laquelle un Modèle ne prévoit plus rien. Elle va de 1 jour
 (AROME, ICON-D2) à 7 jours (ECMWF, GFS). Deux Modèles ne sont comparables que sur les Anticipations

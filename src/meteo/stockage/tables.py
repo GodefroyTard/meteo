@@ -82,7 +82,7 @@ Index("ix_prevision_station_instant", Prevision.station_code, Prevision.instant)
 class Verdict(Base):
     """Une ligne de Verdict : le score d'un Modèle sur une case.
 
-    Une case est le quadruplet (Station, variable, Anticipation, saison). Une case
+    Une case est le quintuplet (Station, variable, Anticipation, saison, périmètre). Une case
     entière est absente de la table lorsque la Couverture est insuffisante — c'est
     ainsi que se matérialise le refus de conclure.
     """
@@ -98,6 +98,13 @@ class Verdict(Base):
     anticipation: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
     saison: Mapped[str] = mapped_column(String(12), primary_key=True)
     modele: Mapped[str] = mapped_column(String(48), primary_key=True)
+
+    perimetre: Mapped[str] = mapped_column(String(8), primary_key=True, default="complet")
+    """« complet » ou « recent ». Deux classements cohabitent : celui de toute la
+    période avec les Modèles anciens, et celui de la fenêtre où les nouveaux venus
+    existent aussi. Ils portent sur des périodes et des pelotons différents, donc leurs
+    chiffres ne se comparent pas — d'où la présence du périmètre dans la clé plutôt
+    qu'un simple drapeau (ADR 0010)."""
 
     rang: Mapped[int] = mapped_column(SmallInteger)
     ecart_moyen: Mapped[float] = mapped_column(REAL)

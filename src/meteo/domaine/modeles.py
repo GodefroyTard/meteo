@@ -7,6 +7,7 @@ c'est l'archive qui fait foi ici, pas la plaquette.
 """
 
 from dataclasses import dataclass
+from datetime import date
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,15 @@ class Modele:
     portee: int
     """Anticipation maximale, en jours."""
 
+    debut_archive: date | None = None
+    """Premier jour servi par l'API Previous Runs, quand le Modèle est plus jeune que
+    la période observée. None signifie « disponible depuis le début ».
+
+    Un Modèle qui porte cette date ne peut pas entrer dans le peloton principal :
+    l'alignement n'ayant lieu qu'aux instants où *tous* ont une valeur, il tronquerait
+    l'historique de tous les autres à sa propre date de naissance (ADR 0010).
+    """
+
     def couvre(self, anticipation: int) -> bool:
         return 1 <= anticipation <= self.portee
 
@@ -33,6 +43,15 @@ CATALOGUE: tuple[Modele, ...] = (
     Modele("icon_eu", "ICON-EU", 7.0, portee=4),
     Modele("ecmwf_ifs025", "ECMWF", 25.0, portee=7),
     Modele("gfs_seamless", "GFS", 13.0, portee=7),
+    # Modèle par apprentissage d'ECMWF, opérationnel. Ses runs passés ne sont archivés
+    # que depuis le 01/03/2025, mesuré le 02/08/2026 : il est donc hors peloton.
+    Modele(
+        "ecmwf_aifs025_single",
+        "AIFS",
+        25.0,
+        portee=7,
+        debut_archive=date(2025, 3, 1),
+    ),
 )
 
 PAR_CLE: dict[str, Modele] = {m.cle: m for m in CATALOGUE}
@@ -47,3 +66,25 @@ def modeles_couvrant(anticipation: int) -> tuple[Modele, ...]:
     à J+7 le peloton se réduit à ECMWF et GFS.
     """
     return tuple(m for m in CATALOGUE if m.couvre(anticipation))
+
+
+def etablis() -> tuple[Modele, ...]:
+    """Les Modèles archivés depuis le début, seuls comparables sur toute la période."""
+    return tuple(m for m in CATALOGUE if m.debut_archive is None)
+
+
+def nouveaux() -> tuple[Modele, ...]:
+    """Les Modèles trop jeunes pour le peloton principal, du plus ancien au plus récent."""
+    return tuple(
+        sorted((m for m in CATALOGUE if m.debut_archive is not None), key=lambda m: m.debut_archive)
+    )
+
+
+def debut_fenetre_recente() -> date | None:
+    """Le jour à partir duquel tous les Modèles du catalogue existent.
+
+    C'est la borne du second classement : celui qui compare tout le monde, sur une
+    fenêtre plus courte, et dont les chiffres ne se comparent pas au premier.
+    """
+    jeunes = nouveaux()
+    return max(m.debut_archive for m in jeunes) if jeunes else None
