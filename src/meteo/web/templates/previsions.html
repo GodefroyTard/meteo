@@ -1,0 +1,543 @@
+{% extends "_base.html" %}
+{% block titre %}Prévision météo{% endblock %}
+{% block titre_page %}Prévision météo{% endblock %}
+
+{% block ciel %}
+  {% if ciel %}
+    <header class="ciel" data-temps="{{ ciel.temps.famille }}"{% if ciel.nuit %} data-nuit{% endif %}>
+      <div class="dedans">
+        <p class="lieu">
+          {{ station_nom or "Votre position" }}
+          {%- if station_altitude is not none %}
+            <span class="altitude">{{ station_altitude | round | int }} m</span>
+          {%- endif %}
+        </p>
+
+        <div class="releve">
+          <svg class="icone icone-temps grande" role="img"
+               aria-label="{{ ciel.temps.libelle }}">
+            <use href="#i-{{ ciel.temps.icone }}"></use>
+          </svg>
+          <p class="degre">
+            {{- "%.0f"|format(ciel.temperature_c) if ciel.temperature_c is not none else "—" -}}
+            <span class="unite">°</span>
+          </p>
+          <div class="dit">
+            <p class="condition">{{ ciel.temps.libelle }}</p>
+            <p class="source">
+              {% if ciel.conseille %}
+                {{ "Température selon" if ciel.temps_modele else "Selon" }}
+                <b>{{ ciel.modele }}</b>, le modèle qui se trompe le moins ici.
+              {% else %}
+                {{ "Température selon" if ciel.temps_modele else "Selon" }}
+                <b>{{ ciel.modele }}</b> — aucun verdict ne départage les modèles ici,
+                c'est le plus fin qui parle, pas le plus sûr.
+              {% endif %}
+              {%- if ciel.temps_modele %}
+                Ciel selon <b>{{ ciel.temps_modele }}</b> :
+                {{ ciel.modele }} n'annonce pas le type de temps.
+              {%- endif %}
+            </p>
+          </div>
+
+          <dl class="journee">
+            <div>
+              <dt>Min</dt>
+              <dd>{{ "%.0f"|format(ciel.min_c) if ciel.min_c is not none else "—" }}°</dd>
+            </div>
+            <div>
+              <dt>Max</dt>
+              <dd>{{ "%.0f"|format(ciel.max_c) if ciel.max_c is not none else "—" }}°</dd>
+            </div>
+            <div>
+              <dt>Pluie</dt>
+              <dd>{{ "%.1f"|format(ciel.pluie_mm) if ciel.pluie_mm else "0" }} mm</dd>
+            </div>
+          </dl>
+        </div>
+
+        {% if desaccord %}
+          <div class="rail">
+            <p class="titre">
+              <span>
+                Ce qu'annonce chaque modèle à cette heure
+                {%- if case %} — le plus fiable est cerclé{% endif %}
+              </span>
+              <span class="ecart">
+                {%- if desaccord.amplitude_c < 0.5 -%}
+                  ils sont d'accord
+                {%- else -%}
+                  {{ "%.1f"|format(desaccord.amplitude_c) }} °C les séparent
+                {%- endif -%}
+              </span>
+            </p>
+            <ul class="piste" style="--rangees: {{ desaccord.rangees }}">
+              {% for p in desaccord.points %}
+                <li class="point s{{ p.couleur }}{{ ' conseille' if p.conseille }}"
+                    style="left: {{ "%.1f"|format(p.position) }}%; --rangee: {{ p.rangee }}"
+                    title="{{ p.nom }} : {{ "%.1f"|format(p.temperature_c) }} °C">
+                  <span class="hors-ecran">
+                    {{ p.nom }} : {{ "%.1f"|format(p.temperature_c) }} degrés
+                  </span>
+                </li>
+              {% endfor %}
+            </ul>
+            <p class="bornes">
+              <span>{{ "%.1f"|format(desaccord.min_c) }} °C</span>
+              <span>{{ "%.1f"|format(desaccord.max_c) }} °C</span>
+            </p>
+          </div>
+        {% endif %}
+      </div>
+    </header>
+  {% endif %}
+{% endblock %}
+
+{% block contenu %}
+  {% if conditions %}
+    {# Trois panneaux de trois cellules : ce qu'on sent dehors, ce que fait le ciel,
+       ce qui situe la journée. Chaque cellule porte la teinte de son état. #}
+    <section class="conditions">
+      <h2 class="etiquette">Ce que ça fait dehors</h2>
+      <div class="console">
+        {% if conditions.ressenti %}
+          <div class="mesure" data-teinte="{{ conditions.teinte_ressenti }}">
+            <p class="quoi">
+              <span class="puce"><svg class="icone" aria-hidden="true">
+                <use href="#i-thermometre"></use></svg></span>
+              Ressenti
+            </p>
+            <p class="valeur">
+              {{- "%.0f"|format(conditions.ressenti.valeur_c) }}<span class="unite">°C</span>
+            </p>
+            <p class="dit">{{ conditions.ressenti.libelle | capitalize }}</p>
+            <p class="appoint">
+              {% if conditions.ressenti.ecart_c | abs >= 1 %}
+                {{ "%+.0f"|format(conditions.ressenti.ecart_c) }} °C par rapport à la mesure
+              {% else %}
+                Le vent et l'humidité ne changent rien
+              {% endif %}
+            </p>
+          </div>
+        {% endif %}
+
+        {% if conditions.vent %}
+          <div class="mesure" data-teinte="{{ conditions.teinte_vent }}">
+            <p class="quoi">
+              <span class="puce">
+                {% if conditions.vent.vers is not none %}
+                  <svg class="icone fleche" aria-hidden="true"
+                       style="--vers: {{ "%.0f"|format(conditions.vent.vers) }}deg">
+                    <use href="#i-fleche"></use></svg>
+                {% else %}
+                  <svg class="icone" aria-hidden="true"><use href="#i-souffle"></use></svg>
+                {% endif %}
+              </span>
+              Vent
+            </p>
+            <p class="valeur">
+              {{- "%.0f"|format(conditions.vent.vitesse_kmh) }}<span class="unite">km/h</span>
+            </p>
+            <p class="dit">
+              {{ conditions.vent.libelle | capitalize }}
+              {%- if conditions.vent.provenance %}, de {{ conditions.vent.provenance }}{% endif %}
+            </p>
+            <p class="appoint">
+              <span class="jauge" aria-hidden="true">
+                {% for cran in range(1, crans_vent + 1) %}
+                  <span{{ ' class="atteint"' | safe if cran <= conditions.vent.cran }}></span>
+                {% endfor %}
+              </span>
+              {% if conditions.vent.rafales_kmh %}
+                Rafales à {{ "%.0f"|format(conditions.vent.rafales_kmh) }} km/h
+              {% endif %}
+            </p>
+          </div>
+        {% endif %}
+
+        {% if conditions.humidite %}
+          <div class="mesure" data-teinte="eau">
+            <p class="quoi">
+              <span class="puce"><svg class="icone" aria-hidden="true">
+                <use href="#i-goutte"></use></svg></span>
+              Humidité
+            </p>
+            <p class="valeur">
+              {{- "%.0f"|format(conditions.humidite.pourcent) }}<span class="unite">%</span>
+            </p>
+            <p class="dit">{{ conditions.humidite.libelle | capitalize }}</p>
+            <p class="appoint">
+              <span class="jauge" aria-hidden="true">
+                {% for cran in range(1, crans_humidite + 1) %}
+                  <span{{ ' class="atteint"' | safe if cran <= conditions.humidite.cran }}></span>
+                {% endfor %}
+              </span>
+              Humidité relative
+            </p>
+          </div>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="conditions">
+      <h2 class="etiquette">Le ciel</h2>
+      <div class="console">
+        {% if conditions.uv %}
+          <div class="mesure" data-teinte="risque-{{ conditions.uv.cran }}">
+            <p class="quoi">
+              <span class="puce"><svg class="icone" aria-hidden="true">
+                <use href="#i-soleil"></use></svg></span>
+              Indice UV
+            </p>
+            <p class="valeur">{{ "%.0f"|format(conditions.uv.indice) }}</p>
+            <p class="dit">
+              {{ conditions.uv.libelle | capitalize }}
+              {%- if conditions.uv_max %}
+                · jusqu'à {{ "%.0f"|format(conditions.uv_max.indice) }} aujourd'hui
+              {%- endif %}
+            </p>
+            <p class="appoint">
+              <span class="jauge" aria-hidden="true">
+                {% for cran in range(1, crans_uv + 1) %}
+                  <span{{ ' class="atteint"' | safe if cran <= conditions.uv.cran }}></span>
+                {% endfor %}
+              </span>
+              {{ "Protection conseillée" if conditions.uv.protection
+                            else "Pas de protection nécessaire" }}
+            </p>
+          </div>
+        {% endif %}
+
+        {% if conditions.soleil %}
+          <div class="mesure" data-teinte="astre">
+            <p class="quoi">
+              <span class="puce"><svg class="icone" aria-hidden="true">
+                <use href="#i-horizon"></use></svg></span>
+              Soleil
+            </p>
+            <p class="valeur">
+              {{- conditions.soleil.heures }}<span class="unite">h</span>{{
+              "%02d"|format(conditions.soleil.minutes) }}
+            </p>
+            <p class="dit">
+              Lever {{ conditions.soleil.lever.strftime("%H:%M") }},
+              coucher {{ conditions.soleil.coucher.strftime("%H:%M") }}
+            </p>
+            <p class="appoint">
+              {% if conditions.soleil.variation_min is none %}
+                Durée du jour
+              {% elif conditions.soleil.variation_min == 0 %}
+                Demain, même durée à la minute près
+              {% else %}
+                Demain, {{ conditions.soleil.variation_min | abs }} min
+                {{ "de plus" if conditions.soleil.variation_min > 0 else "de moins" }}
+              {% endif %}
+            </p>
+          </div>
+        {% endif %}
+
+        {% if conditions.isotherme %}
+          <div class="mesure" data-teinte="glace">
+            <p class="quoi">
+              <span class="puce"><svg class="icone" aria-hidden="true">
+                <use href="#i-sommets"></use></svg></span>
+              Isotherme 0 °C
+            </p>
+            <p class="valeur">
+              {{- "{:,.0f}".format(conditions.isotherme.altitude_m) | replace(",", " ") -}}
+              <span class="unite">m</span>
+            </p>
+            <p class="dit">
+              {% if conditions.isotherme.denivele_m is none %}
+                Altitude du zéro degré
+              {% elif conditions.isotherme.au_dessus %}
+                {{ "{:,.0f}".format(conditions.isotherme.denivele_m) | replace(",", " ") }} m
+                au-dessus de vous
+              {% else %}
+                Sous vos pieds — il peut neiger ici
+              {% endif %}
+            </p>
+            <p class="appoint">La neige tombe quelques centaines de mètres plus bas</p>
+          </div>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="conditions">
+      <h2 class="etiquette">Ce qui situe la journée</h2>
+      <div class="console">
+        {% if conditions.ecart_c is not none %}
+          <div class="mesure" data-teinte="{{ conditions.teinte_ecart }}">
+            <p class="quoi">
+              <span class="puce"><svg class="icone" aria-hidden="true">
+                <use href="#i-ecart"></use></svg></span>
+              Écart à la moyenne
+            </p>
+            <p class="valeur">
+              {%- if conditions.dans_la_moyenne -%}
+                ≈
+              {%- else -%}
+                {{ "%+.1f"|format(conditions.ecart_c) }}<span class="unite">°C</span>
+              {%- endif -%}
+            </p>
+            <p class="dit">
+              {% if conditions.dans_la_moyenne %}
+                Dans la moyenne de la période
+              {% elif conditions.ecart_c > 0 %}
+                Plus chaud que d'habitude
+              {% else %}
+                Plus frais que d'habitude
+              {% endif %}
+            </p>
+            <p class="appoint">
+              {{ "%.0f"|format(conditions.max_prevu_c) }}° prévus,
+              {{ "%.0f"|format(conditions.normale.max_c) }}° en moyenne ici
+            </p>
+          </div>
+        {% endif %}
+
+        {% if conditions.pression %}
+          <div class="mesure" data-teinte="ardoise">
+            <p class="quoi">
+              <span class="puce"><svg class="icone" aria-hidden="true">
+                <use href="#i-barometre"></use></svg></span>
+              Pression
+            </p>
+            <p class="valeur">
+              {{- "%.0f"|format(conditions.pression.hpa) }}<span class="unite">hPa</span>
+            </p>
+            <p class="dit">{{ conditions.pression.libelle | capitalize }}</p>
+            <p class="appoint">
+              {% if conditions.pression.variation_hpa is not none %}
+                {{ "%+.1f"|format(conditions.pression.variation_hpa) }} hPa en trois heures
+              {% else %}
+                Au niveau de la mer
+              {% endif %}
+            </p>
+          </div>
+        {% endif %}
+
+        {% if conditions.air %}
+          <div class="mesure" data-teinte="risque-{{ conditions.air.cran }}">
+            <p class="quoi">
+              <span class="puce"><svg class="icone" aria-hidden="true">
+                <use href="#i-feuille"></use></svg></span>
+              Qualité de l'air
+            </p>
+            <p class="valeur">{{ "%.0f"|format(conditions.air.indice) }}</p>
+            <p class="dit">
+              {{ conditions.air.libelle | capitalize }}
+              {%- if conditions.air.dominant %} · {{ conditions.air.dominant }}{% endif %}
+            </p>
+            <p class="appoint">
+              <span class="jauge" aria-hidden="true">
+                {% for cran in range(1, crans_air + 1) %}
+                  <span{{ ' class="atteint"' | safe if cran <= conditions.air.cran }}></span>
+                {% endfor %}
+              </span>
+              Indice européen
+            </p>
+          </div>
+        {% endif %}
+      </div>
+
+      <p class="assise renvoi">
+        Sauf mention contraire, ces valeurs viennent d'<b>{{ conditions.modele }}</b>,
+        le modèle qui porte la température en haut de page
+        {{- "." if not conditions.emprunts }}
+        {%- for quoi, qui in conditions.emprunts %}
+          {{ " —" if loop.first }} {{ quoi }} selon <b>{{ qui }}</b>
+          {{- "." if loop.last else "," }}
+        {%- endfor %}
+        {%- if conditions.air %}
+          La qualité de l'air est l'analyse européenne CAMS, servie par Open-Meteo :
+          ce n'est pas un modèle de prévision et elle ne se décline pas par modèle.
+        {%- endif %}
+        {%- if conditions.normale %}
+          La moyenne est mesurée à cette station même, sur
+          {{ conditions.normale.annees }} année{{ "s" if conditions.normale.annees > 1 }}
+          ({{ conditions.normale.jours }} journées à la même période) — pas une normale
+          climatique, qui en demanderait trente.
+        {%- endif %}
+      </p>
+    </section>
+  {% endif %}
+
+  {% if cartes %}
+    <section>
+      <h2 class="etiquette">Ce qu'annonce chaque modèle</h2>
+      <ul class="cartes">
+        {% for c in cartes %}
+          <li class="carte s{{ c.couleur }}{{ ' conseille' if c.conseille }}">
+            <button type="button" class="ouvrir" aria-expanded="false"
+                    aria-controls="detail-{{ c.cle }}">
+              <span class="hors-ecran">Voir le détail horaire de {{ c.nom }}</span>
+            </button>
+            <div class="entete">
+              <span class="nom">{{ c.nom }}</span>
+              <span class="maille">{{ c.maille_km }} km</span>
+            </div>
+            <div class="lecture">
+              <p class="valeur">
+                {{- "%.0f"|format(c.maintenant_c) if c.maintenant_c is not none else "—" -}}
+                <span class="unite">°</span>
+              </p>
+              <svg class="icone icone-temps" role="img" aria-label="{{ c.temps.libelle }}">
+                <use href="#i-{{ c.temps.icone }}"></use>
+              </svg>
+            </div>
+            <dl class="detail">
+              <dt>Aujourd'hui</dt>
+              <dd>
+                {{- "%.0f"|format(c.aujourdhui_min_c) if c.aujourdhui_min_c is not none else "—" }}
+                / {{ "%.0f"|format(c.aujourdhui_max_c) if c.aujourdhui_max_c is not none else "—" }}°
+                {%- if c.aujourdhui_pluie_mm %}
+                  <span class="pluie">· {{ "%.1f"|format(c.aujourdhui_pluie_mm) }} mm</span>
+                {%- endif %}
+              </dd>
+              <dt>Demain</dt>
+              <dd>
+                {{- "%.0f"|format(c.demain_min_c) if c.demain_min_c is not none else "—" }}
+                / {{ "%.0f"|format(c.demain_max_c) if c.demain_max_c is not none else "—" }}°
+                {%- if c.demain_pluie_mm %}
+                  <span class="pluie">· {{ "%.1f"|format(c.demain_pluie_mm) }} mm</span>
+                {%- endif %}
+              </dd>
+            </dl>
+            {% if c.conseille %}<p class="badge">Le plus fiable</p>{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+
+      <p class="assise renvoi">
+        {% if case %}
+          Le modèle mis en avant est celui qui se trompe le moins ici sur la
+          température, à {{ anticipation }} jour d'échéance, {{ saison.libelle }}.
+        {% else %}
+          Aucun verdict ne départage les modèles ici sur la température à
+          {{ anticipation }} jour d'échéance, {{ saison.libelle }} : aucun n'est mis en avant.
+        {% endif %}
+        <a href="/fiabilite{{ lien_lieu }}">Voir sur quoi ce jugement repose</a>
+      </p>
+
+      {% for c in cartes %}
+        <div class="detail-horaire" id="detail-{{ c.cle }}" hidden>
+          <h3>{{ c.nom }}, heure par heure</h3>
+          {% if not c.annonce_le_temps %}
+            <p class="note">
+              {{ c.nom }} n'annonce pas le type de temps — seules la température et
+              la pluie sont affichées.
+            </p>
+          {% endif %}
+          {% for j in c.jours %}
+            <div class="jour">
+              <p class="libelle">{{ j.libelle }}</p>
+              <div class="bande" role="table"
+                   aria-label="{{ j.libelle }}, prévision horaire de {{ c.nom }}">
+                {% for h in j.heures %}
+                  <div class="heure" role="row"
+                       {%- if not h.jour %} data-nuit{% endif %}
+                       {%- if h.pluie_mm %} data-mouille{% endif %}>
+                    <span class="quand" role="cell">{{ "%02d"|format(h.heure) }}h</span>
+                    {# Une icône « temps non annoncé » répétée sur 40 heures ne dit
+                       rien : la note en tête du panneau le dit une fois. #}
+                    {% if c.annonce_le_temps %}
+                      <svg class="icone icone-temps" role="cell"
+                           aria-label="{{ h.temps.libelle }}">
+                        <use href="#i-{{ h.temps.icone }}"></use>
+                      </svg>
+                    {% endif %}
+                    <span class="temp" role="cell">
+                      {{- "%.0f"|format(h.temperature_c) if h.temperature_c is not none else "—" }}°
+                    </span>
+                    <span class="mm{{ ' sec' if not h.pluie_mm }}" role="cell">
+                      {{- "%.1f"|format(h.pluie_mm) if h.pluie_mm else "" }}
+                    </span>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+          {% endfor %}
+
+          {% if c.semaine %}
+            <div class="semaine">
+              <p class="libelle">La suite de la semaine</p>
+              <ul>
+                {% for j in c.semaine %}
+                  <li>
+                    <span class="quand">{{ j.libelle }}</span>
+                    {% if c.annonce_le_temps %}
+                      <svg class="icone icone-temps" role="img"
+                           aria-label="{{ j.temps.libelle }}">
+                        <use href="#i-{{ j.temps.icone }}"></use>
+                      </svg>
+                    {% else %}
+                      <span></span>
+                    {% endif %}
+                    <span class="mini">{{ "%.0f"|format(j.min_c) }}°</span>
+                    <span class="amplitude" aria-hidden="true">
+                      <span style="left: {{ "%.1f"|format(j.depart) }}%;
+                                   width: {{ "%.1f"|format(j.largeur) }}%"></span>
+                    </span>
+                    <span class="maxi">{{ "%.0f"|format(j.max_c) }}°</span>
+                    <span class="mm{{ ' sec' if not j.pluie_mm }}">
+                      {{- "%.1f"|format(j.pluie_mm) ~ " mm" if j.pluie_mm else "" }}
+                    </span>
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+          {% elif c.derniere_echeance %}
+            <p class="note fin-portee">
+              {{ c.nom }} ne prévoit pas au-delà de {{ c.derniere_echeance | lower }} —
+              c'est un modèle de courte échéance, très fin sur peu de jours.
+            </p>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </section>
+  {% else %}
+    <section>
+      <div class="vide">
+        <h2>Pas de prévision à afficher</h2>
+        <p>
+          Open-Meteo n'a rien rendu pour ce lieu à l'instant. Choisissez une station
+          dans le menu, ou réessayez dans un moment.
+        </p>
+      </div>
+    </section>
+  {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Détail horaire : une carte ouvre son panneau et referme les autres.
+// Le panneau est rendu par le serveur, on ne fait que le montrer — donc rien à
+// recharger, et son contenu reste dans le document pour les lecteurs d'écran.
+(function () {
+  var cartes = document.querySelectorAll('.carte .ouvrir');
+  if (!cartes.length) return;
+
+  function fermerTout(sauf) {
+    cartes.forEach(function (b) {
+      if (b === sauf) return;
+      b.setAttribute('aria-expanded', 'false');
+      b.closest('.carte').removeAttribute('data-ouvert');
+      document.getElementById(b.getAttribute('aria-controls')).hidden = true;
+    });
+  }
+
+  cartes.forEach(function (bouton) {
+    bouton.addEventListener('click', function () {
+      var panneau = document.getElementById(bouton.getAttribute('aria-controls'));
+      var ouvert = bouton.getAttribute('aria-expanded') === 'true';
+      fermerTout(bouton);
+      bouton.setAttribute('aria-expanded', ouvert ? 'false' : 'true');
+      panneau.hidden = ouvert;
+      if (ouvert) bouton.closest('.carte').removeAttribute('data-ouvert');
+      else bouton.closest('.carte').setAttribute('data-ouvert', 'true');
+    });
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,78 @@
+# Base commune aux deux services qui font tourner du code métier.
+x-meteo: &meteo
+  build: .
+  image: meteo:local
+  depends_on:
+    db:
+      condition: service_healthy
+  env_file: .env
+  environment:
+    # Dans le réseau de compose, la base répond sur son nom de service, pas sur
+    # localhost:5433. Cette valeur l'emporte sur celle du .env, qui reste utile
+    # quand on lance le serveur à la main sur l'hôte.
+    METEO_DSN: postgresql+psycopg://meteo:${METEO_MDP_BASE:-meteo}@db:5432/meteo
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: meteo
+      # N'est pris en compte qu'à la toute première initialisation du volume.
+      POSTGRES_PASSWORD: ${METEO_MDP_BASE:-meteo}
+      POSTGRES_DB: meteo
+    ports:
+      # Lié à 127.0.0.1, et c'est capital : Docker publie ses ports en contournant
+      # ufw. Un « 5433:5432 » nu exposerait la base à Internet entier, mot de passe
+      # par défaut compris.
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meteo"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # Lot de mise à jour, toutes les heures. Voir docker/crontab pour la cadence.
+  # Le jeton Infoclimat étant lié à une adresse IP déclarée, ce service ne collecte
+  # les observations que depuis la machine déclarée.
+  lot:
+    <<: *meteo
+
+  # Les deux services ci-dessous ne démarrent que sous le profil « vps ». En
+  # développement, le serveur se lance à la main par « uv run meteo servir ».
+  # Sur le VPS, COMPOSE_PROFILES=vps dans le .env les active sans rien taper de plus.
+  web:
+    <<: *meteo
+    profiles: ["vps"]
+    command: ["meteo", "servir", "--hote", "0.0.0.0"]
+    # Aucun « ports » : le site n'est joignable que par le proxy, sur le réseau interne.
+    expose:
+      - "8000"
+
+  # Proxy d'entrée. Il écoute sur 80 et 443, obtient et renouvelle seul le
+  # certificat Let's Encrypt, et transmet à « web ». C'est le seul service exposé.
+  proxy:
+    image: caddy:2-alpine
+    profiles: ["vps"]
+    depends_on:
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # Repli sur localhost : sans domaine renseigné, Caddy sert un certificat local
+      # et le site répond en HTTPS sur la machine même. De quoi tester, et assez
+      # visible pour qu'on n'oublie pas de le renseigner en production.
+      METEO_DOMAINE: ${METEO_DOMAINE:-localhost}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

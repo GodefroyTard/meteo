@@ -1,0 +1,9 @@
+# Le nom de domaine vient du .env. Le déclarer suffit à obtenir un certificat :
+# Caddy contacte Let's Encrypt au premier démarrage, puis renouvelle tout seul.
+# C'est aussi pour cela que le port 80 doit rester ouvert — la validation passe par lui.
+{$METEO_DOMAINE} {
+	encode zstd gzip
+
+	# « web » est le nom du service dans compose, résolu sur le réseau interne.
+	reverse_proxy web:8000
+}

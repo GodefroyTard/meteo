@@ -1,0 +1,173 @@
+/* Graphe de vérification.
+   Palette catégorielle validée pour les deux modes (voir docs/adr/0006).
+   Les couleurs sont posées en CSS et non en JavaScript : le mode sombre bascule
+   sans rien recalculer, et une série garde sa teinte quand on en masque d'autres. */
+
+.viz {
+  --viz-surface: #ffffff;
+  --viz-ink: #0b0b0b;
+  --viz-ink-2: #52514e;
+  --viz-muted: #898781;
+  --viz-grille: #e1e0d9;
+  --viz-axe: #c3c2b7;
+
+  --serie-1: #2a78d6;
+  --serie-2: #eb6834;
+  --serie-3: #1baf7a;
+  --serie-4: #eda100;
+  --serie-5: #e87ba4;
+  --serie-6: #008300;
+
+  position: relative;
+  margin-top: 1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz {
+    --viz-surface: #14161a;
+    --viz-ink: #ffffff;
+    --viz-ink-2: #c3c2b7;
+    --viz-muted: #898781;
+    --viz-grille: #2c2c2a;
+    --viz-axe: #383835;
+
+    --serie-1: #3987e5;
+    --serie-2: #d95926;
+    --serie-3: #199e70;
+    --serie-4: #c98500;
+    --serie-5: #d55181;
+    --serie-6: #008300;
+  }
+}
+:root[data-theme="dark"] .viz {
+  --viz-surface: #14161a;
+  --viz-ink: #ffffff;
+  --viz-ink-2: #c3c2b7;
+  --viz-muted: #898781;
+  --viz-grille: #2c2c2a;
+  --viz-axe: #383835;
+
+  --serie-1: #3987e5;
+  --serie-2: #d95926;
+  --serie-3: #199e70;
+  --serie-4: #c98500;
+  --serie-5: #d55181;
+  --serie-6: #008300;
+}
+
+/* Barre de commandes : une seule rangée, au-dessus du graphe. */
+.viz-commandes {
+  display: flex; flex-wrap: wrap; gap: .5rem; align-items: center;
+  margin-bottom: .75rem;
+}
+.viz-commandes .groupe { display: flex; gap: .25rem; }
+.viz-commandes button {
+  font: inherit; font-size: .82rem; padding: .3rem .65rem; cursor: pointer;
+  border: 1px solid var(--viz-axe); background: transparent; color: var(--viz-ink-2);
+  border-radius: 8px;
+}
+.viz-commandes button[aria-pressed="true"] {
+  border-color: var(--accent); color: var(--accent); font-weight: 600;
+}
+.viz-commandes .indice { font-size: .8rem; color: var(--viz-muted); margin-left: auto;
+                         min-width: 0; }
+@media (max-width: 560px) {
+  .viz-commandes .indice { margin-left: 0; flex-basis: 100%; }
+}
+
+.viz-cadre { position: relative; touch-action: pan-y; }
+.viz svg { width: 100%; height: auto; display: block; cursor: crosshair; }
+
+.viz-grille-ligne { stroke: var(--viz-grille); stroke-width: 1; }
+.viz-axe-ligne { stroke: var(--viz-axe); stroke-width: 1; }
+.viz-graduation { fill: var(--viz-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.viz-graduation.y { text-anchor: end; }
+.viz-graduation.x { text-anchor: middle; }
+
+.viz-serie { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.viz-serie.observe { stroke: var(--viz-ink); stroke-width: 2.6; }
+.viz-serie.s1 { stroke: var(--serie-1); }
+.viz-serie.s2 { stroke: var(--serie-2); }
+.viz-serie.s3 { stroke: var(--serie-3); }
+.viz-serie.s4 { stroke: var(--serie-4); }
+.viz-serie.s5 { stroke: var(--serie-5); }
+.viz-serie.s6 { stroke: var(--serie-6); }
+
+/* Mode bandes : une rangée par série, colorée aux heures de pluie annoncée. */
+.viz-bande-fond { fill: var(--viz-grille); opacity: .45; }
+.viz-bande-nom { fill: var(--viz-ink-2); font-size: 12px; text-anchor: end; }
+.viz-bande.observe { fill: var(--viz-ink); }
+.viz-bande.s1 { fill: var(--serie-1); }
+.viz-bande.s2 { fill: var(--serie-2); }
+.viz-bande.s3 { fill: var(--serie-3); }
+.viz-bande.s4 { fill: var(--serie-4); }
+.viz-bande.s5 { fill: var(--serie-5); }
+.viz-bande.s6 { fill: var(--serie-6); }
+
+.viz-tableau td.pluvieux { font-weight: 650; color: var(--viz-ink); }
+
+.viz-curseur { stroke: var(--viz-axe); stroke-width: 1; pointer-events: none; }
+.viz-point { stroke: var(--viz-surface); stroke-width: 2; pointer-events: none; }
+.viz-selection { fill: var(--accent); opacity: .14; pointer-events: none; }
+
+/* Infobulle : la valeur domine, le nom de la série suit. */
+.viz-bulle {
+  position: absolute; pointer-events: none; z-index: 5;
+  background: var(--viz-surface); color: var(--viz-ink);
+  border: 1px solid var(--viz-axe); border-radius: 8px;
+  padding: .5rem .65rem; font-size: .82rem; min-width: 9.5rem;
+  box-shadow: 0 4px 14px rgba(0,0,0,.12);
+  opacity: 0; transition: opacity .12s;
+}
+.viz-bulle[data-visible="true"] { opacity: 1; }
+.viz-bulle .quand { color: var(--viz-muted); font-size: .76rem; margin-bottom: .35rem; }
+.viz-bulle table { width: 100%; border-collapse: collapse; }
+.viz-bulle td { padding: .1rem 0; border: 0; }
+.viz-bulle .valeur {
+  text-align: right; font-weight: 650; font-variant-numeric: tabular-nums;
+  color: var(--viz-ink); padding-left: .6rem;
+}
+.viz-bulle .nom { color: var(--viz-ink-2); }
+.viz-bulle .cle { display: inline-block; width: 12px; height: 2px; margin-right: .4rem;
+                  vertical-align: middle; border-radius: 1px; }
+
+/* Légende : bascule l'affichage d'une série. */
+.viz-legende { list-style: none; display: flex; flex-wrap: wrap; gap: .4rem;
+               padding: 0; margin: .75rem 0 0; }
+.viz-legende button {
+  display: flex; align-items: center; gap: .4rem; cursor: pointer;
+  font: inherit; font-size: .82rem; color: var(--viz-ink-2);
+  background: transparent; border: 1px solid transparent; border-radius: 6px;
+  padding: .2rem .5rem;
+}
+.viz-legende button:hover { border-color: var(--viz-axe); }
+.viz-legende button[aria-pressed="false"] { opacity: .45; text-decoration: line-through; }
+.viz-legende .cle { width: 14px; height: 3px; border-radius: 2px; }
+.viz-legende .cle.observe { background: var(--viz-ink); height: 4px; }
+.viz-legende .cle.s1 { background: var(--serie-1); }
+.viz-legende .cle.s2 { background: var(--serie-2); }
+.viz-legende .cle.s3 { background: var(--serie-3); }
+.viz-legende .cle.s4 { background: var(--serie-4); }
+.viz-legende .cle.s5 { background: var(--serie-5); }
+.viz-legende .cle.s6 { background: var(--serie-6); }
+
+/* Vue tableau : rend chaque valeur atteignable sans survol, et lève
+   l'avertissement de contraste des teintes claires. */
+.viz-tableau { margin-top: 1rem; font-size: .82rem; }
+.viz-tableau summary { cursor: pointer; color: var(--viz-ink-2); }
+.viz-tableau .defilable { max-height: 22rem; overflow: auto; margin-top: .6rem; }
+.viz-tableau table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.viz-tableau th, .viz-tableau td {
+  padding: .3rem .5rem; text-align: right; border-bottom: 1px solid var(--viz-grille);
+  white-space: nowrap;
+}
+.viz-tableau th:first-child, .viz-tableau td:first-child { text-align: left; }
+.viz-tableau thead th { position: sticky; top: 0; background: var(--viz-surface);
+                        color: var(--viz-muted); font-weight: 600; }
+
+.viz-vide { color: var(--viz-muted); font-size: .9rem; }
+
+@media (forced-colors: active) {
+  .viz-serie { stroke: CanvasText; }
+  .viz-legende button[aria-pressed="false"] { opacity: 1; }
+}

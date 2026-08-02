@@ -1,0 +1,10 @@
+# Lot de mise à jour. `meteo rafraichir` ne recollecte qu'une fenêtre récente : c'est
+# ce qui le rend planifiable. N'y mettez jamais `meteo previsions` sans bornes, qui
+# repart de METEO_DEBUT_HISTORIQUE et dure des heures.
+#
+# À 17 plutôt qu'à l'heure pile : les runs des modèles ne sortent pas plus souvent
+# qu'une fois par heure, et on évite la bousculade du haut de l'heure.
+#
+# La configuration est relue depuis /app/env.sh : cron ne transmet pas l'environnement
+# du conteneur à ses tâches. La sortie part sur celle de PID 1, donc dans `docker logs`.
+17 * * * * . /app/env.sh; cd /app && meteo rafraichir >>/proc/1/fd/1 2>&1

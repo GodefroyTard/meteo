@@ -1,0 +1,140 @@
+{# Symboles du Temps, référencés par <use href="#i-…">. Les clés sont celles que
+   rend meteo.domaine.temps. Tracé au filet, jamais rempli : la même icône tient à
+   18 px dans une bande horaire et à 72 px dans la bande de ciel. #}
+<svg width="0" height="0" aria-hidden="true" focusable="false" class="sprite">
+  <defs>
+    <g id="g-nuage-bas">
+      <path d="M17.5 19H8a4.5 4.5 0 0 1-.3-9 5.5 5.5 0 0 1 10.2 1.5A3.75 3.75 0 0 1 17.5 19z"/>
+    </g>
+    <g id="g-nuage-haut">
+      <path d="M17.5 15.5H8a4.5 4.5 0 0 1-.3-9 5.5 5.5 0 0 1 10.2 1.5A3.75 3.75 0 0 1 17.5 15.5z"/>
+    </g>
+  </defs>
+
+  <symbol id="i-soleil" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="4.6"/>
+    <path d="M12 2.2v2.4M12 19.4v2.4M4.5 12H2.1M21.9 12h-2.4M6.7 6.7 5 5M19 19l-1.7-1.7M6.7 17.3 5 19M19 5l-1.7 1.7"/>
+  </symbol>
+
+  <symbol id="i-lune" viewBox="0 0 24 24">
+    <path d="M20.5 14.2A8.6 8.6 0 0 1 9.8 3.5a8.6 8.6 0 1 0 10.7 10.7z"/>
+  </symbol>
+
+  <symbol id="i-soleil-voile" viewBox="0 0 24 24">
+    <circle cx="8.6" cy="8" r="3.1"/>
+    <path d="M8.6 2.3v1.5M4.6 4 5.7 5.1M2.9 8H4.4M4.6 12l1.1-1.1M12.6 4l-1.1 1.1"/>
+    <use href="#g-nuage-bas"/>
+  </symbol>
+
+  <symbol id="i-lune-voile" viewBox="0 0 24 24">
+    <path d="M13.6 9.4A5.6 5.6 0 0 1 7.7 2.5a5.6 5.6 0 1 0 6.9 6.9z"/>
+    <use href="#g-nuage-bas"/>
+  </symbol>
+
+  <symbol id="i-couvert" viewBox="0 0 24 24">
+    <path d="M6.4 8.2A5 5 0 0 1 15.9 6"/>
+    <use href="#g-nuage-bas"/>
+  </symbol>
+
+  <symbol id="i-brouillard" viewBox="0 0 24 24">
+    <use href="#g-nuage-haut"/>
+    <path d="M6 18.6h12M8.5 21.6h9"/>
+  </symbol>
+
+  <symbol id="i-bruine" viewBox="0 0 24 24">
+    <use href="#g-nuage-haut"/>
+    <path d="M9.4 18.4l-.5 1.5M12.8 18.4l-.5 1.5M16.2 18.4l-.5 1.5"/>
+  </symbol>
+
+  <symbol id="i-pluie" viewBox="0 0 24 24">
+    <use href="#g-nuage-haut"/>
+    <path d="M9.6 18.2l-1.2 3.4M13.2 18.2 12 21.6M16.8 18.2l-1.2 3.4"/>
+  </symbol>
+
+  <symbol id="i-averse" viewBox="0 0 24 24">
+    <path d="M4.4 9.6a3.6 3.6 0 0 1 4.9-4.7M6.6 3.1V1.8M2.6 6.6H1.3M3.4 3.4 2.5 2.5"/>
+    <use href="#g-nuage-haut"/>
+    <path d="M10.4 18.2l-1.5 3.6M15.4 18.2l-1.5 3.6"/>
+  </symbol>
+
+  <symbol id="i-neige" viewBox="0 0 24 24">
+    <use href="#g-nuage-haut"/>
+    <path d="M8.4 19.4h2M9.4 18.4v2M14.4 19.4h2M15.4 18.4v2M11.4 22.2h2M12.4 21.2v2"/>
+  </symbol>
+
+  <symbol id="i-orage" viewBox="0 0 24 24">
+    <use href="#g-nuage-haut"/>
+    <path d="M13.4 17.2l-3 4h2.7l-1 3"/>
+  </symbol>
+
+  <symbol id="i-inconnu" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="8.2" stroke-dasharray="2.4 3.1"/>
+    <path d="M8.6 12h6.8"/>
+  </symbol>
+
+  {# Navigation. La cible dit « qui vise juste » — c'est la question de la page
+     de fiabilité, mieux que ne le dirait une courbe. #}
+  <symbol id="i-menu" viewBox="0 0 24 24">
+    <path d="M4 7h16M4 12h16M4 17h16"/>
+  </symbol>
+
+  <symbol id="i-fermer" viewBox="0 0 24 24">
+    <path d="M6.2 6.2l11.6 11.6M17.8 6.2L6.2 17.8"/>
+  </symbol>
+
+  {# Les neuf mesures du panneau de conditions. Une icône chacune : c'est elle qui
+     porte la couleur, et c'est elle qu'on reconnaît avant d'avoir lu l'étiquette. #}
+  <symbol id="i-thermometre" viewBox="0 0 24 24">
+    <path d="M14 14.8V5.2a2.2 2.2 0 0 0-4.4 0v9.6a3.9 3.9 0 1 0 4.4 0z"/>
+    <path d="M11.8 8.6v6.6"/>
+  </symbol>
+
+  <symbol id="i-souffle" viewBox="0 0 24 24">
+    <path d="M3.2 8.6h9.4a2.7 2.7 0 1 0-2.7-2.7"/>
+    <path d="M3.2 12.4h13.1a2.7 2.7 0 1 1-2.7 2.7"/>
+    <path d="M3.2 16.6h6.6"/>
+  </symbol>
+
+  <symbol id="i-goutte" viewBox="0 0 24 24">
+    <path d="M12 3.4c3.2 3.6 5.5 6.4 5.5 9.3a5.5 5.5 0 0 1-11 0c0-2.9 2.3-5.7 5.5-9.3z"/>
+  </symbol>
+
+  <symbol id="i-horizon" viewBox="0 0 24 24">
+    <path d="M3 18.5h18M7.8 18.5a4.2 4.2 0 0 1 8.4 0"/>
+    <path d="M12 4.6v2.2M5.6 7.4l1.5 1.6M18.4 7.4l-1.5 1.6M2.8 13.4h2M19.2 13.4h2"/>
+  </symbol>
+
+  <symbol id="i-sommets" viewBox="0 0 24 24">
+    <path d="M2.6 19.4h18.8"/>
+    <path d="M3.4 16.2 8.6 8l3.4 5.2L15.4 7l5.2 9.2z"/>
+    <path d="M2.6 11.6h4.2M17.4 11.6h4"/>
+  </symbol>
+
+  <symbol id="i-barometre" viewBox="0 0 24 24">
+    <path d="M4 17.4a8.6 8.6 0 1 1 16 0"/>
+    <path d="M12 17.4 16 10"/>
+    <circle cx="12" cy="17.4" r="1.1" fill="currentColor" stroke="none"/>
+  </symbol>
+
+  <symbol id="i-feuille" viewBox="0 0 24 24">
+    <path d="M4.6 19.6C3 15 5 8.4 10.4 6.2c3-1.2 6.4-1 9.2-1.4.5 4-.4 8.6-2.6 11.2-2.7 3.2-8.4 4-12.4 3.6z"/>
+    <path d="M8.4 16.6c1.6-4 4.4-6.8 8.2-8.6"/>
+  </symbol>
+
+  <symbol id="i-ecart" viewBox="0 0 24 24">
+    <path d="M3.4 14.6h17.2" stroke-dasharray="2.6 2.6"/>
+    <path d="M12 3.6v7.4M12 3.6 8.6 7.2M12 3.6l3.4 3.6"/>
+    <path d="M6.4 19.4h11.2"/>
+  </symbol>
+
+  {# Pointe vers le nord au repos ; la page la fait tourner vers où va le vent. #}
+  <symbol id="i-fleche" viewBox="0 0 24 24">
+    <path d="M12 20.5V4.5M12 4.2l5.4 5.6M12 4.2 6.6 9.8"/>
+  </symbol>
+
+  <symbol id="i-cible" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="8.4"/>
+    <circle cx="12" cy="12" r="4"/>
+    <circle cx="12" cy="12" r=".9" fill="currentColor" stroke="none"/>
+  </symbol>
+</svg>

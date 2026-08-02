@@ -1,0 +1,9 @@
+# Le jeton n'entre jamais dans l'image : il est injecté au démarrage par env_file.
+.env
+.git
+.venv
+.ruff_cache
+.pytest_cache
+__pycache__
+tests
+docs

@@ -1,0 +1,200 @@
+{% extends "_base.html" %}
+{% block titre %}Fiabilité des modèles{% endblock %}
+{% block titre_page %}Fiabilité des modèles{% endblock %}
+
+{% block contenu %}
+  <section>
+    <h2 class="etiquette">Sur quoi porte le verdict</h2>
+    <form method="get" action="/fiabilite" class="reglages" data-valide-au-changement>
+      <input type="hidden" name="station" value="{{ station_choisie }}">
+      {% if position %}
+        <input type="hidden" name="lat" value="{{ position[0] }}">
+        <input type="hidden" name="lon" value="{{ position[1] }}">
+      {% endif %}
+      <label>Variable
+        <select name="variable">
+          {% for v in variables %}
+            <option value="{{ v }}" {% if v == variable %}selected{% endif %}>
+              {{ "Température" if v == "temperature" else "Pluie" }}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Anticipation
+        <select name="anticipation">
+          {% for a in anticipations %}
+            <option value="{{ a }}" {% if a == anticipation %}selected{% endif %}>
+              {{ a }} jour{{ "s" if a > 1 }} avant
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Saison
+        <select name="saison">
+          {% for s in saisons %}
+            <option value="{{ s.value }}" {% if s == saison %}selected{% endif %}>
+              {{ s.libelle }}{% if s.value not in saisons_disponibles %} — aucun verdict{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+      <noscript><button type="submit" class="principal">Voir</button></noscript>
+    </form>
+
+    <div class="verdict">
+      {% if case %}
+        <p class="reponse">
+          À {{ case.station_nom }}, {{ saison.libelle }},
+          {{ anticipation }} jour{{ "s" if anticipation > 1 }} à l'avance :
+          {% if case.vainqueurs | length == 1 %}croyez {% endif %}
+          {%- for ligne in case.lignes if ligne.ex_aequo -%}
+            {%- if not loop.first %}{{ " et " if loop.last else ", " }}{% endif -%}
+            <em><span class="pastille s{{ teintes[ligne.modele] }}" aria-hidden="true"></span>{{
+              ligne.nom_modele }}</em>
+          {%- endfor -%}
+          {{ " se valent." if case.vainqueurs | length > 1 else "." }}
+        </p>
+        <p class="assise">
+          Sur {{ case.nb_heures }} heures mesurées réparties sur {{ case.nb_jours }} jours
+          ({{ (case.couverture * 100) | round | int }} % de couverture).
+          Verdict calculé le {{ case.calcule_le.strftime("%d/%m/%Y à %H:%M") }} UTC.
+        </p>
+
+        <div class="defilable">
+        <table>
+          <thead>
+            <tr>
+              <th>Modèle</th>
+              {% if variable == "temperature" %}
+                <th>Écart moyen</th><th>Biais</th>
+              {% else %}
+                <th>Taux d'erreur</th><th>Fausses alertes</th><th>Pluies manquées</th>
+              {% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for ligne in case.lignes %}
+              <tr class="{{ 'gagnant' if ligne.ex_aequo }}">
+                <td>
+                  <span class="pastille s{{ teintes[ligne.modele] }}" aria-hidden="true"></span>
+                  {{ ligne.nom_modele }}
+                  {% if ligne.ex_aequo and case.vainqueurs | length > 1 %}
+                    <span class="marque">ex aequo</span>
+                  {% endif %}
+                </td>
+                {% if variable == "temperature" %}
+                  <td>{{ "%.2f" | format(ligne.ecart_moyen) }} °C</td>
+                  <td>{{ "%+.2f" | format(ligne.biais) }} °C</td>
+                {% else %}
+                  <td>{{ (ligne.ecart_moyen * 100) | round(1) }} %</td>
+                  <td>{{ (ligne.fausses_alertes * 100) | round(1) if ligne.fausses_alertes is not none else "—" }} %</td>
+                  <td>{{ (ligne.pluies_manquees * 100) | round(1) if ligne.pluies_manquees is not none else "—" }} %</td>
+                {% endif %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        </div>
+      {% else %}
+        <p class="reponse">Pas de verdict ici.</p>
+        {% if manque %}
+          <p class="assise">
+            {% if manque.jamais_collecte %}
+              Aucune observation n'a encore été collectée pour cette station
+              {{ saison.libelle }}.
+            {% else %}
+              Il faudrait {{ manque.heures_attendues }} heures d'observations valides
+              {{ saison.libelle }} sur la période couverte
+              ({{ manque.debut.strftime("%m/%Y") }} → {{ manque.fin.strftime("%m/%Y") }}) ;
+              nous en avons {{ manque.heures_observees }}, soit
+              {{ (manque.couverture * 100) | round | int }} % là où il en faut
+              {{ (manque.seuil * 100) | round | int }} %.
+            {% endif %}
+            On préfère ne rien affirmer plutôt qu'affirmer sur trop peu.
+          </p>
+        {% endif %}
+      {% endif %}
+    </div>
+  </section>
+
+  <section>
+    <div class="section-cadre">
+      <h2>
+        Ce qui était annoncé {{ anticipation }} jour{{ "s" if anticipation > 1 }} plus tôt,
+        face à ce qui a été mesuré — {{ "température" if variable == "temperature" else "pluie" }}
+        {{ saison.libelle }}
+      </h2>
+      <p class="assise">
+        Toutes les courbes portent sur les mêmes heures que la mesure : à chaque instant,
+        la valeur affichée est celle qu'annonçait le modèle
+        {{ anticipation }} jour{{ "s" if anticipation > 1 }} auparavant. Le graphe ne montre
+        pas le futur — il n'y aurait rien à quoi le comparer.
+        {%- if variable != "temperature" %}
+          Chaque rangée est colorée aux heures de pluie annoncée : une plage sans équivalent
+          sur la rangée « Mesuré » est une fausse alerte, l'inverse une pluie manquée.
+        {%- endif %}
+      </p>
+
+      <div class="viz" data-viz
+           data-station="{{ station_choisie }}"
+           data-anticipation="{{ anticipation }}"
+           data-saison="{{ saison.value }}"
+           data-variable="{{ variable }}"
+           data-jours="{{ jours }}">
+
+        <div class="viz-commandes">
+          <div class="groupe">
+            {% for j in [7, 14, 30, 90] %}
+              <button type="button" data-jours="{{ j }}" aria-pressed="{{ 'true' if j == jours else 'false' }}">
+                {{ j }} j
+              </button>
+            {% endfor %}
+          </div>
+          <button type="button" data-action="reinitialiser">Vue complète</button>
+          <span class="indice"></span>
+        </div>
+
+        <div class="viz-cadre">
+          <p class="viz-vide">
+            Le graphe interactif demande JavaScript. Les valeurs restent lisibles
+            dans le tableau ci-dessous.
+          </p>
+        </div>
+        <div class="viz-bulle" role="status" aria-live="polite" data-visible="false"></div>
+        <ul class="viz-legende"></ul>
+
+        <details class="viz-tableau">
+          <summary>Voir les valeurs</summary>
+          <div class="defilable">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Mesuré</th>
+                  {% for nom in verification.previsions %}<th>{{ nom }}</th>{% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                {% for i in range(verification.instants | length) %}
+                  <tr>
+                    <td>{{ verification.instants[i].strftime("%d/%m %H:%M") }}</td>
+                    <td>{{ "%.1f"|format(verification.observations[i]) if verification.observations[i] is not none else "—" }}</td>
+                    {% for serie in verification.previsions.values() %}
+                      <td>{{ "%.1f"|format(serie[i]) if serie[i] is not none else "—" }}</td>
+                    {% endfor %}
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <script type="application/json" id="viz-donnees">{{ donnees | tojson }}</script>
+      </div>
+    </div>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/viz.js" defer></script>
+{% endblock %}

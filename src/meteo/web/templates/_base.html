@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block titre %}Météo{% endblock %} — quel modèle croire</title>
+<link rel="stylesheet" href="/static/page.css">
+<link rel="stylesheet" href="/static/viz.css">
+<script>
+  // Avant peinture, sinon le menu s'ouvre puis se referme sous les yeux à chaque
+  // navigation. Sans préférence enregistrée, on laisse la feuille de style
+  // décider : ouvert sur large écran, fermé sinon.
+  try {
+    var etat = localStorage.getItem('meteo-menu');
+    if (etat === 'ouvert' || etat === 'ferme') document.documentElement.dataset.menu = etat;
+  } catch (e) {}
+</script>
+</head>
+<body>
+{% include "_icones.html" %}
+
+<a class="saut" href="#contenu">Aller au contenu</a>
+
+<button type="button" class="bascule" id="bascule" aria-controls="menu" aria-expanded="false">
+  <svg class="icone" id="bascule-icone" aria-hidden="true"><use href="#i-fermer"></use></svg>
+  <span class="hors-ecran">Ouvrir ou fermer le menu</span>
+</button>
+
+<aside class="menu" id="menu" aria-label="Navigation principale">
+  <p class="marque">
+    <span class="nom">Météo</span>
+    <span class="sous">et quel modèle croire</span>
+  </p>
+
+  <nav class="rubriques">
+    <a href="/{{ lien_lieu }}"
+       {% if page == "previsions" %}aria-current="page"{% endif %}>
+      <svg class="icone" aria-hidden="true"><use href="#i-soleil-voile"></use></svg>
+      Prévision météo
+    </a>
+    <a href="/fiabilite{{ lien_lieu }}"
+       {% if page == "fiabilite" %}aria-current="page"{% endif %}>
+      <svg class="icone" aria-hidden="true"><use href="#i-cible"></use></svg>
+      Fiabilité des modèles
+    </a>
+  </nav>
+
+  <section class="bloc">
+    <h2 class="etiquette">Lieu</h2>
+    <form method="get" action="{{ action }}" class="choix-lieu" data-valide-au-changement>
+      {# Changer de station ne doit pas réinitialiser les réglages de la page. #}
+      {% for nom, valeur in champs_caches %}
+        <input type="hidden" name="{{ nom }}" value="{{ valeur }}">
+      {% endfor %}
+      <label class="hors-ecran" for="station">Station</label>
+      <select name="station" id="station">
+        {% for s in stations %}
+          <option value="{{ s.code }}" {% if s.code == station_choisie %}selected{% endif %}>
+            {{ s.nom }} — {{ s.altitude | round | int }} m
+          </option>
+        {% endfor %}
+      </select>
+      <noscript><button type="submit" class="secondaire">Voir</button></noscript>
+    </form>
+
+    <button type="button" id="geoloc" class="principal">Utiliser ma position</button>
+    <p class="etat" id="geoloc-etat">
+      {%- if position -%}
+        Position utilisée : {{ "%.4f"|format(position[0]) }}, {{ "%.4f"|format(position[1]) }}
+      {%- else -%}
+        Ou choisissez une station.
+      {%- endif -%}
+    </p>
+
+    {% if rattachement %}
+      {% if rattachement.reference %}
+        <div class="rattachement">
+          <h3>Vos statistiques viennent de {{ rattachement.reference.nom }}</h3>
+          à {{ "%.1f"|format(rattachement.reference.distance_km) }} km,
+          {{ rattachement.reference.altitude | round | int }} m d'altitude
+          ({{ "%+d"|format(rattachement.reference.denivele_m | round | int) }} m par rapport à vous).
+        </div>
+      {% else %}
+        <div class="rattachement refus">
+          <h3>Aucune station assez comparable près de chez vous</h3>
+          On préfère ne rien affirmer plutôt que vous donner le verdict d'un autre versant.
+          Les stations les plus proches :
+          <ul>
+            {% for c in rattachement.candidates %}
+              <li>
+                <a href="{{ action }}?station={{ c.code }}{{ suite_params }}">{{ c.nom }}</a>
+                — {{ "%.1f"|format(c.distance_km) }} km,
+                {{ "%+d"|format(c.denivele_m | round | int) }} m de dénivelé
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+    {% endif %}
+  </section>
+
+  <div class="pied">
+    {# Plus de bouton : la mise à jour est planifiée (docker/crontab), et l'exposer
+       à tout visiteur revenait à confier à des inconnus le quota d'une association
+       de bénévoles. Reste ce qui intéresse vraiment — la fraîcheur des données. #}
+    <p class="fraicheur">
+      <span class="etiquette">Dernière mise à jour</span>
+      {% if dernier_lot %}
+        <time datetime="{{ dernier_lot.isoformat() }}">
+          {{ dernier_lot.strftime("%d/%m/%Y à %H:%M") }}
+        </time>
+      {% else %}
+        <span class="absent">Aucune donnée collectée pour l'instant.</span>
+      {% endif %}
+    </p>
+    <p class="credits">
+      Observations du réseau StatIC d'<a href="https://www.infoclimat.fr">Infoclimat</a>,
+      une association de bénévoles. Prévisions agrégées par
+      <a href="https://open-meteo.com">Open-Meteo</a>.
+    </p>
+  </div>
+</aside>
+
+<div class="voile-menu" id="voile-menu"></div>
+
+<div class="page">
+  {% block ciel %}{% endblock %}
+  <main id="contenu">
+    <h1 class="hors-ecran">{% block titre_page %}{% endblock %}</h1>
+    {% block contenu %}{% endblock %}
+  </main>
+</div>
+
+<script>
+// Menu latéral. L'état est relu au chargement plutôt que déduit d'un drapeau :
+// la feuille de style décide de l'ouverture par défaut selon la largeur, et
+// c'est elle qui fait foi tant que l'utilisateur n'a pas tranché.
+(function () {
+  var bascule = document.getElementById('bascule');
+  var menu = document.getElementById('menu');
+  var voile = document.getElementById('voile-menu');
+  var icone = document.getElementById('bascule-icone');
+
+  function ouvert() { return menu.getBoundingClientRect().left >= 0; }
+
+  function refleter() {
+    var o = ouvert();
+    bascule.setAttribute('aria-expanded', o ? 'true' : 'false');
+    icone.firstElementChild.setAttribute('href', o ? '#i-fermer' : '#i-menu');
+  }
+
+  function poser(etat) {
+    document.documentElement.dataset.menu = etat;
+    try { localStorage.setItem('meteo-menu', etat); } catch (e) {}
+    refleter();
+  }
+
+  bascule.addEventListener('click', function () { poser(ouvert() ? 'ferme' : 'ouvert'); });
+  voile.addEventListener('click', function () { poser('ferme'); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && ouvert() && window.innerWidth < 1024) poser('ferme');
+  });
+  window.addEventListener('resize', refleter);
+  refleter();
+})();
+
+// Les réglages s'appliquent au changement, dans le menu comme dans les pages : sans
+// cela, choisir « 7 jours avant » sans penser à valider laisse le verdict et le
+// graphe sur l'ancien réglage, ce qui donne l'impression qu'ils l'ignorent. Le
+// balayage porte sur data-valide-au-changement et non sur un formulaire nommé :
+// une page qui ajoute un formulaire de réglages hérite du comportement au lieu de
+// l'oublier. Le bouton de secours reste en place pour les navigateurs sans script.
+document.querySelectorAll('form[data-valide-au-changement] select').forEach(function (champ) {
+  champ.addEventListener('change', function () { champ.form.submit(); });
+});
+
+// Géolocalisation : le navigateur donne lat/lon, le serveur en déduit l'altitude
+// et la station de référence. Nécessite un contexte sécurisé — HTTPS, ou localhost
+// en développement.
+(function () {
+  var bouton = document.getElementById('geoloc');
+  var etat = document.getElementById('geoloc-etat');
+
+  if (!navigator.geolocation) {
+    bouton.disabled = true;
+    etat.textContent = "Votre navigateur ne sait pas donner votre position.";
+    return;
+  }
+
+  bouton.addEventListener('click', function () {
+    bouton.disabled = true;
+    etat.textContent = 'Localisation en cours…';
+
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        var params = new URLSearchParams(window.location.search);
+        params.set('lat', pos.coords.latitude.toFixed(5));
+        params.set('lon', pos.coords.longitude.toFixed(5));
+        params.delete('station');
+        window.location.search = params.toString();
+      },
+      function (err) {
+        bouton.disabled = false;
+        etat.textContent = err.code === err.PERMISSION_DENIED
+          ? "Position refusée — choisissez une station dans la liste."
+          : "Position indisponible — choisissez une station dans la liste.";
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+    );
+  });
+})();
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

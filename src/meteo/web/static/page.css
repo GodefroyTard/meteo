@@ -1,0 +1,850 @@
+/* Feuille de style du front — menu latéral, page de prévision, page de fiabilité.
+
+   Direction : le ciel en haut, l'instrument en bas. Une seule zone porte de la
+   couleur — la bande de ciel, teintée par le Temps annoncé — et tout le reste est
+   tenu au gris d'instrument pour que les chiffres restent lisibles.
+
+   Deux règles héritées des ADR, à ne pas contourner :
+   - les six teintes de série appartiennent aux Modèles (ADR 0006). Elles ne
+     colorent jamais du texte, seulement des repères : filet de carte, pastille du
+     rail. Le nom du Modèle reste à l'encre.
+   - les couleurs du ciel dépendent du Temps, jamais du Modèle (ADR 0007).
+
+   La surface des cartes vaut exactement --viz-surface : le graphe a été validé
+   contre elle, il doit continuer à reposer dessus. */
+
+:root {
+  /* Neutres — calcaire du Vercors, pas de crème. */
+  --fond: #e8ecf1;
+  --papier: #ffffff;
+  --encre: #10141a;
+  --encre-2: #49525e;
+  --discret: #78818d;
+  --trait: #dce2e9;
+  --trait-fort: #c3ccd6;
+  /* Encre d'imprimeur : aucune des six teintes de série, donc jamais confondue
+     avec un Modèle. */
+  --accent: #58399f;
+  --accent-doux: #efeaf9;
+  --sur-accent: #ffffff;
+  --ombre: 0 1px 2px rgba(16, 20, 26, .05), 0 8px 24px -12px rgba(16, 20, 26, .18);
+
+  --serie-1: #2a78d6;
+  --serie-2: #eb6834;
+  --serie-3: #1baf7a;
+  --serie-4: #eda100;
+  --serie-5: #e87ba4;
+  --serie-6: #008300;
+
+  /* Ciels. Le dégradé descend du zénith vers l'horizon ; le texte se tient dans
+     l'angle sombre, sous voile, pour rester lisible sur tous. */
+  --ciel-clair-jour: linear-gradient(157deg, #14538f 0%, #3b8ac9 46%, #a3d2ef 100%);
+  --ciel-clair-nuit: linear-gradient(157deg, #080f2a 0%, #16264f 52%, #3a4f86 100%);
+  --ciel-voile-jour: linear-gradient(157deg, #275d8b 0%, #6a99bd 55%, #c6d9e5 100%);
+  --ciel-voile-nuit: linear-gradient(157deg, #0d1529 0%, #26354f 55%, #4d5d79 100%);
+  --ciel-couvert: linear-gradient(157deg, #39424e 0%, #5f6a77 55%, #929ca7 100%);
+  --ciel-brouillard: linear-gradient(157deg, #545a61 0%, #7d858b 50%, #adb2b5 100%);
+  --ciel-bruine: linear-gradient(157deg, #354756 0%, #5a7180 55%, #93a7b3 100%);
+  --ciel-pluie: linear-gradient(157deg, #253744 0%, #445d6c 55%, #7d97a5 100%);
+  --ciel-averse: linear-gradient(157deg, #1f4257 0%, #3f6d84 60%, #89aebe 100%);
+  --ciel-neige: linear-gradient(157deg, #3f4c68 0%, #74829e 55%, #bcc7db 100%);
+  --ciel-orage: linear-gradient(157deg, #191630 0%, #393253 55%, #6d6290 100%);
+  --ciel-inconnu: linear-gradient(157deg, #343a43 0%, #59616b 55%, #8f979f 100%);
+  /* Deux voiles superposés. Le vertical garantit un plancher sombre sur toute la
+     largeur du haut de bande, là où se tient le texte : sans lui, un ciel de
+     brouillard passe en gris clair à droite et le blanc n'y tient plus. Le
+     diagonal creuse l'angle où se lisent le lieu et la température. */
+  --voile-ciel: linear-gradient(180deg, rgba(5, 9, 16, .46) 0%,
+                rgba(5, 9, 16, .36) 55%, rgba(5, 9, 16, .06) 100%),
+                linear-gradient(103deg, rgba(5, 9, 16, .34) 0%,
+                rgba(5, 9, 16, .1) 45%, rgba(5, 9, 16, 0) 72%);
+
+
+  /* Teintes d'état — la troisième et dernière signification de la couleur sur cette
+     page (ADR 0007). Elles n'apparaissent que dans le panneau de conditions, et
+     seulement en fond lavé, en icône et en jauge : jamais en pastille ni en filet,
+     ces formes-là appartiennent aux Modèles. Une échelle de risque unique sert
+     l'indice UV, la qualité de l'air et le vent fort — un seul barème de gravité. */
+  --risque-1: #2b8a5a;
+  --risque-2: #ae881c;
+  --risque-3: #c9662a;
+  --risque-4: #bd382e;
+  --risque-5: #8a44a8;
+  --risque-6: #6b2f6b;
+  --ton-chaud: #bd512c;
+  --ton-froid: #2f6cad;
+  --souffle: #1c7c84;
+  --eau: #2f6cad;
+  --astre: #b96b0e;
+  --glace: #3a7ca6;
+  --ardoise: #55606d;
+
+  --menu-l: 17.5rem;
+  --contenu-l: 60rem;
+
+  --serif: ui-serif, "Iowan Old Style", "Source Serif 4", Charter, Georgia,
+           "Times New Roman", serif;
+  --grotesque: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+               Arial, sans-serif;
+}
+
+/* Les valeurs sombres sont déclarées sous les deux portées : la media query suit
+   le réglage système, l'attribut data-theme suit un choix explicite. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --fond: #0b0d11;
+    --papier: #14161a;
+    --encre: #eef1f5;
+    --encre-2: #b0b9c4;
+    --discret: #838d99;
+    --trait: #262b33;
+    --trait-fort: #39414c;
+    --accent: #b39ef0;
+    --accent-doux: #221d33;
+    --sur-accent: #17122a;
+    --ombre: 0 1px 2px rgba(0, 0, 0, .5), 0 8px 24px -12px rgba(0, 0, 0, .8);
+
+    --serie-1: #3987e5;
+    --serie-2: #d95926;
+    --serie-3: #199e70;
+    --serie-4: #c98500;
+    --serie-5: #d55181;
+    --serie-6: #008300;
+
+    --risque-1: #45b47c;
+    --risque-2: #d3a838;
+    --risque-3: #e58a48;
+    --risque-4: #dd6258;
+    --risque-5: #b473d6;
+    --risque-6: #9a5a9a;
+    --ton-chaud: #e07d52;
+    --ton-froid: #5f9de0;
+    --souffle: #3fa9b2;
+    --eau: #5f9de0;
+    --astre: #e2963f;
+    --glace: #64a6d0;
+    --ardoise: #9aa5b2;
+  }
+}
+:root[data-theme="dark"] {
+  --fond: #0b0d11;
+  --papier: #14161a;
+  --encre: #eef1f5;
+  --encre-2: #b0b9c4;
+  --discret: #838d99;
+  --trait: #262b33;
+  --trait-fort: #39414c;
+  --accent: #b39ef0;
+  --accent-doux: #221d33;
+  --sur-accent: #17122a;
+  --ombre: 0 1px 2px rgba(0, 0, 0, .5), 0 8px 24px -12px rgba(0, 0, 0, .8);
+
+  --serie-1: #3987e5;
+  --serie-2: #d95926;
+  --serie-3: #199e70;
+  --serie-4: #c98500;
+  --serie-5: #d55181;
+  --serie-6: #008300;
+
+  --risque-1: #45b47c;
+  --risque-2: #d3a838;
+  --risque-3: #e58a48;
+  --risque-4: #dd6258;
+  --risque-5: #b473d6;
+  --risque-6: #9a5a9a;
+  --ton-chaud: #e07d52;
+  --ton-froid: #5f9de0;
+  --souffle: #3fa9b2;
+  --eau: #5f9de0;
+  --astre: #e2963f;
+  --glace: #64a6d0;
+  --ardoise: #9aa5b2;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font: 400 16px/1.55 var(--grotesque);
+  color: var(--encre);
+  background: var(--fond);
+  -webkit-font-smoothing: antialiased;
+}
+
+.page { padding-bottom: 4rem; transition: margin-left .22s ease; }
+main { max-width: var(--contenu-l); margin: 0 auto; padding: 0 1.25rem;
+       width: 100%; min-width: 0; }
+.saut {
+  position: absolute; left: .75rem; top: .75rem; z-index: 80;
+  padding: .5rem .8rem; border-radius: 8px;
+  background: var(--accent); color: var(--sur-accent); text-decoration: none;
+  transform: translateY(-160%); transition: transform .15s;
+}
+.saut:focus { transform: none; }
+
+.hors-ecran {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+
+/* Étiquette d'instrument : c'est elle qui nomme chaque bloc de la page. */
+.etiquette {
+  font-size: .7rem; font-weight: 650; text-transform: uppercase;
+  letter-spacing: .11em; color: var(--discret);
+  margin: 0 0 .7rem;
+}
+
+.sprite { position: absolute; }
+.icone { width: 1em; height: 1em; fill: none; stroke: currentColor;
+         stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+         display: block; }
+/* Le tracé s'affine quand l'icône grandit : à 72 px, 1,7 serait un trait de feutre. */
+.icone.grande { stroke-width: 1.25; }
+
+/* ─────────────────────────────────────────────────────────────────
+   Menu latéral
+
+   L'ouverture par défaut est décidée par la feuille de style — ouvert sur large
+   écran, fermé sinon — et l'attribut data-menu ne sert qu'à enregistrer un choix
+   explicite. Ainsi, sans JavaScript, le menu reste utilisable là où il tient.
+   ───────────────────────────────────────────────────────────────── */
+
+.bascule {
+  position: fixed; top: .85rem; left: .85rem; z-index: 60;
+  display: grid; place-items: center; width: 2.4rem; height: 2.4rem; padding: 0;
+  border-radius: 9px; border: 1px solid var(--trait-fort);
+  background: color-mix(in srgb, var(--papier) 88%, transparent);
+  backdrop-filter: blur(8px); color: var(--encre-2); cursor: pointer;
+  transition: left .22s ease, background .22s, border-color .22s;
+}
+.bascule .icone { font-size: 1.2rem; }
+.bascule:hover { color: var(--accent); border-color: var(--accent); }
+
+.menu {
+  position: fixed; inset: 0 auto 0 0; z-index: 55; width: var(--menu-l);
+  display: flex; flex-direction: column; gap: 1.6rem;
+  padding: 1.1rem 1.1rem 1.3rem; overflow-y: auto;
+  background: var(--papier); border-right: 1px solid var(--trait);
+  transition: transform .22s ease;
+}
+
+/* Voile de fond : sur écran étroit le menu recouvre la page au lieu de la pousser. */
+.voile-menu {
+  position: fixed; inset: 0; z-index: 50; background: rgba(8, 11, 16, .5);
+  opacity: 0; pointer-events: none; transition: opacity .22s;
+}
+
+@media (min-width: 64rem) {
+  .page { margin-left: var(--menu-l); }
+  .bascule { left: calc(var(--menu-l) - 3.05rem); background: transparent;
+             backdrop-filter: none; border-color: transparent; }
+  :root[data-menu="ferme"] .menu { transform: translateX(-100%); }
+  :root[data-menu="ferme"] .page { margin-left: 0; }
+  :root[data-menu="ferme"] .bascule {
+    left: .85rem; border-color: var(--trait-fort);
+    background: color-mix(in srgb, var(--papier) 88%, transparent);
+    backdrop-filter: blur(8px);
+  }
+}
+
+@media (max-width: 63.99rem) {
+  .menu { transform: translateX(-100%); box-shadow: var(--ombre); }
+  :root[data-menu="ouvert"] .menu { transform: none; }
+  :root[data-menu="ouvert"] .voile-menu { opacity: 1; pointer-events: auto; }
+  :root[data-menu="ouvert"] .bascule { left: calc(var(--menu-l) - 3.05rem);
+                                       background: transparent; backdrop-filter: none;
+                                       border-color: transparent; }
+}
+
+/* Le bouton flotte sur le coin haut-gauche du contenu chaque fois qu'il n'est pas
+   rangé dans un menu ouvert — c'est-à-dire par défaut sur écran étroit. On lui fait
+   la place plutôt que de le laisser recouvrir le premier mot de la page. */
+.page > .ciel:first-child, .page > main:first-child { padding-top: 3.5rem; }
+@media (min-width: 64rem) {
+  :root:not([data-menu="ferme"]) .page > .ciel:first-child { padding-top: 2rem; }
+  :root:not([data-menu="ferme"]) .page > main:first-child { padding-top: 1.9rem; }
+}
+
+.menu .marque { margin: 0; padding-right: 2.8rem; display: flex; flex-direction: column; }
+.menu .marque .nom { font-family: var(--serif); font-size: 1.55rem; line-height: 1.05; }
+.menu .marque .sous {
+  margin-top: .3rem; font-size: .66rem; font-weight: 650; color: var(--discret);
+  text-transform: uppercase; letter-spacing: .12em;
+}
+
+.rubriques { display: flex; flex-direction: column; gap: .15rem; }
+.rubriques a {
+  display: flex; align-items: center; gap: .7rem;
+  padding: .58rem .7rem; border-radius: 9px;
+  color: var(--encre-2); text-decoration: none; font-size: .93rem; font-weight: 550;
+}
+.rubriques a .icone { font-size: 1.2rem; color: var(--discret); flex: none; }
+.rubriques a:hover { background: color-mix(in srgb, var(--encre) 6%, transparent);
+                     color: var(--encre); }
+.rubriques a[aria-current="page"] {
+  background: var(--accent-doux); color: var(--accent); font-weight: 650;
+}
+.rubriques a[aria-current="page"] .icone { color: var(--accent); }
+
+.menu .bloc { display: flex; flex-direction: column; gap: .6rem; }
+.menu .etat { margin: 0; font-size: .76rem; color: var(--discret); line-height: 1.45; }
+.menu .pied {
+  margin-top: auto; padding-top: 1.1rem; border-top: 1px solid var(--trait);
+  display: flex; flex-direction: column; gap: .6rem;
+}
+.menu .fraicheur { display: flex; flex-direction: column; gap: .15rem; margin: 0; }
+.menu .fraicheur .etiquette { margin: 0; }
+.menu .fraicheur time {
+  font-size: .85rem; color: var(--encre-2); font-variant-numeric: tabular-nums;
+}
+.menu .fraicheur .absent { font-size: .8rem; }
+.menu .credits { margin: 0; font-size: .73rem; color: var(--discret); line-height: 1.5; }
+.menu .credits a { color: var(--encre-2); }
+.menu button { width: 100%; }
+.menu button.principal { background: var(--accent); color: var(--sur-accent);
+                         border-color: transparent; font-weight: 600; }
+.menu button.secondaire { background: transparent; color: var(--encre-2); font-size: .86rem; }
+.menu button.secondaire:hover:not(:disabled) { color: var(--accent);
+                                               border-color: var(--accent); }
+.menu button:disabled { opacity: .55; cursor: default; }
+.menu .rattachement { margin: .2rem 0 0; padding: .7rem .8rem; font-size: .8rem; }
+.menu .rattachement h3 { font-size: .84rem; margin-bottom: .3rem; }
+.menu .rattachement ul { font-size: .78rem; }
+
+/* ─────────────────────────────────────────────────────────────────
+   La bande de ciel. Le seul endroit coloré de la page.
+   ───────────────────────────────────────────────────────────────── */
+
+.ciel {
+  position: relative; isolation: isolate;
+  margin: 0 0 2.25rem; padding: 2rem 0 1.4rem;
+  border-radius: 0 0 18px 18px;
+  color: #fff;
+  background-image: var(--voile-ciel), var(--ciel-inconnu);
+  overflow: hidden;
+}
+.ciel .dedans { position: relative; z-index: 1;
+                max-width: 62rem; margin: 0 auto; padding: 0 1.25rem; }
+.ciel[data-temps="clair"] { background-image: var(--voile-ciel), var(--ciel-clair-jour); }
+.ciel[data-temps="clair"][data-nuit] { background-image: var(--voile-ciel), var(--ciel-clair-nuit); }
+.ciel[data-temps="voile"] { background-image: var(--voile-ciel), var(--ciel-voile-jour); }
+.ciel[data-temps="voile"][data-nuit] { background-image: var(--voile-ciel), var(--ciel-voile-nuit); }
+.ciel[data-temps="couvert"] { background-image: var(--voile-ciel), var(--ciel-couvert); }
+.ciel[data-temps="brouillard"] { background-image: var(--voile-ciel), var(--ciel-brouillard); }
+.ciel[data-temps="bruine"] { background-image: var(--voile-ciel), var(--ciel-bruine); }
+.ciel[data-temps="pluie"] { background-image: var(--voile-ciel), var(--ciel-pluie); }
+.ciel[data-temps="averse"] { background-image: var(--voile-ciel), var(--ciel-averse); }
+.ciel[data-temps="neige"] { background-image: var(--voile-ciel), var(--ciel-neige); }
+.ciel[data-temps="orage"] { background-image: var(--voile-ciel), var(--ciel-orage); }
+
+/* En mode sombre, un ciel d'été éclairerait la pièce. On le baisse sans le
+   décolorer, plutôt que d'entretenir douze dégradés de plus. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .ciel::before { opacity: 1; }
+}
+:root[data-theme="dark"] .ciel::before { opacity: 1; }
+.ciel::before {
+  content: ""; position: absolute; inset: 0; z-index: 0;
+  background: rgba(6, 8, 13, .55); opacity: 0; pointer-events: none;
+}
+
+.ciel .lieu {
+  display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap;
+  margin: 0 0 1.1rem;
+  font-size: .74rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .12em; color: rgba(255, 255, 255, .82);
+}
+.ciel .lieu .altitude { letter-spacing: .06em; color: rgba(255, 255, 255, .62); }
+
+.ciel .releve { display: flex; align-items: center; gap: 1.3rem; flex-wrap: wrap; }
+
+.ciel .degre {
+  font-size: clamp(4rem, 12vw, 6rem); font-weight: 250; line-height: .88;
+  letter-spacing: -.045em; font-variant-numeric: tabular-nums;
+  margin: 0; display: flex; align-items: flex-start;
+}
+.ciel .degre .unite { font-size: .38em; font-weight: 300; margin-top: .06em;
+                      letter-spacing: 0; opacity: .65; }
+
+.ciel .icone-temps { font-size: 4.2rem; color: rgba(255, 255, 255, .95); flex: none; }
+
+.ciel .dit { min-width: 11rem; flex: 1 1 15rem; }
+.ciel .condition {
+  font-family: var(--serif); font-size: 1.55rem; line-height: 1.15;
+  font-weight: 400; margin: 0 0 .35rem;
+}
+.ciel .source {
+  margin: 0; font-size: .8rem; line-height: 1.5; color: rgba(255, 255, 255, .86);
+  max-width: 27rem; text-wrap: pretty;
+}
+.ciel .source b { font-weight: 650; color: #fff; }
+
+/* Le relevé du jour, aligné à droite — trois valeurs, pas une phrase. */
+.ciel .journee {
+  display: flex; gap: 1.5rem; margin: 0; flex: none;
+  padding-left: 1.4rem; border-left: 1px solid rgba(255, 255, 255, .22);
+}
+.ciel .journee dt {
+  font-size: .64rem; font-weight: 650; text-transform: uppercase;
+  letter-spacing: .12em; color: rgba(255, 255, 255, .66); margin-bottom: .15rem;
+}
+.ciel .journee dd {
+  margin: 0; font-size: 1.4rem; font-weight: 300; line-height: 1;
+  letter-spacing: -.03em; font-variant-numeric: tabular-nums;
+}
+
+/* Le rail de désaccord : six Modèles, une échelle, l'écart qui les sépare.
+   Posé en verre sur le ciel — c'est un instrument, pas une décoration. */
+.rail {
+  margin: 1.4rem -.6rem -.4rem; padding: .85rem 1.1rem .7rem;
+  border-radius: 12px;
+  background: rgba(7, 11, 18, .5);
+  border: 1px solid rgba(255, 255, 255, .14);
+  backdrop-filter: blur(7px) saturate(1.1);
+}
+.rail .titre {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
+  font-size: .68rem; font-weight: 650; text-transform: uppercase;
+  letter-spacing: .11em; color: rgba(255, 255, 255, .8);
+  margin: 0 0 .7rem;
+}
+.rail .titre .ecart { letter-spacing: .04em; text-transform: none; font-size: .78rem;
+                      color: #fff; font-variant-numeric: tabular-nums; }
+/* La piste grandit avec le nombre de rangées empilées : deux Modèles qui annoncent
+   la même valeur se rangent l'un au-dessus de l'autre plutôt que l'un sous l'autre. */
+.rail .piste {
+  position: relative; list-style: none; padding: 0; margin: 0;
+  height: calc(1.15rem + var(--rangees, 1) * 20px);
+}
+.rail .piste::before {
+  content: ""; position: absolute; left: 0; right: 0; bottom: .5rem; height: 2px;
+  border-radius: 1px; background: rgba(255, 255, 255, .3);
+}
+.rail .point {
+  position: absolute; width: 13px; height: 13px; border-radius: 50%;
+  bottom: calc(.5rem + 1px + var(--rangee, 0) * 20px);
+  transform: translate(-50%, 50%);
+  /* Anneau sombre : deux pastilles voisines ne se fondent pas l'une dans l'autre. */
+  box-shadow: 0 0 0 2px rgba(9, 13, 20, .55);
+}
+/* Filet de rappel vers l'échelle, pour une pastille montée d'une rangée. */
+.rail .point::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 1px; margin-left: -.5px;
+  height: calc(var(--rangee, 0) * 20px);
+  background: rgba(255, 255, 255, .28);
+}
+.rail .point.s1 { background: var(--serie-1); }
+.rail .point.s2 { background: var(--serie-2); }
+.rail .point.s3 { background: var(--serie-3); }
+.rail .point.s4 { background: var(--serie-4); }
+.rail .point.s5 { background: var(--serie-5); }
+.rail .point.s6 { background: var(--serie-6); }
+/* Le Modèle conseillé est cerclé de blanc — même taille que les autres : la
+   position dit la valeur, le cerclage dit la fiabilité, rien ne dit deux choses. */
+.rail .point.conseille {
+  box-shadow: 0 0 0 1.5px rgba(9, 13, 20, .65), 0 0 0 3.5px rgba(255, 255, 255, .92);
+}
+.rail .bornes {
+  display: flex; justify-content: space-between;
+  font-size: .72rem; color: rgba(255, 255, 255, .88);
+  font-variant-numeric: tabular-nums; margin-top: .15rem;
+}
+
+/* Mise en place : les pastilles se posent sur le rail, une fois, à l'ouverture. */
+@media (prefers-reduced-motion: no-preference) {
+  .rail .point { animation: poser .5s cubic-bezier(.2, .8, .3, 1) backwards; }
+  .ciel .degre, .ciel .icone-temps { animation: monter .55s cubic-bezier(.2, .8, .3, 1) backwards; }
+  .ciel .icone-temps { animation-delay: .06s; }
+}
+@keyframes poser {
+  from { transform: translate(-50%, -140%); opacity: 0; }
+}
+@keyframes monter {
+  from { transform: translateY(.5rem); opacity: 0; }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Conditions du jour — un panneau d'instruments, pas neuf cartes.
+
+   Trois panneaux de trois cellules, séparées par des filets plutôt que par du vide :
+   neuf rectangles flottants ne font pas un ensemble. Chaque cellule porte la teinte
+   de son état, lavée en fond et pleine dans l'icône et la jauge. La valeur, elle,
+   reste à l'encre : c'est la règle de la page, le texte ne porte jamais la couleur.
+   ───────────────────────────────────────────────────────────────── */
+
+section.conditions { margin-bottom: 1.4rem; }
+
+.console {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  background: var(--papier); border: 1px solid var(--trait);
+  border-radius: 14px; box-shadow: var(--ombre); overflow: hidden;
+}
+
+.mesure {
+  --teinte: var(--ardoise);
+  position: relative; isolation: isolate; min-width: 0;
+  padding: .95rem 1.05rem 1.05rem;
+}
+.mesure + .mesure { border-left: 1px solid var(--trait); }
+/* Le lavé descend de l'étiquette vers le vide : la couleur habite le haut de la
+   cellule, là où se tient l'icône, et lâche avant le texte de détail. */
+.mesure::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(
+    170deg, color-mix(in srgb, var(--teinte) 22%, transparent) 0%,
+    color-mix(in srgb, var(--teinte) 7%, transparent) 46%, transparent 88%);
+}
+
+.mesure[data-teinte="chaud"] { --teinte: var(--ton-chaud); }
+.mesure[data-teinte="froid"] { --teinte: var(--ton-froid); }
+.mesure[data-teinte="neutre"] { --teinte: var(--ardoise); }
+.mesure[data-teinte="souffle"] { --teinte: var(--souffle); }
+.mesure[data-teinte="eau"] { --teinte: var(--eau); }
+.mesure[data-teinte="astre"] { --teinte: var(--astre); }
+.mesure[data-teinte="glace"] { --teinte: var(--glace); }
+.mesure[data-teinte="ardoise"] { --teinte: var(--ardoise); }
+.mesure[data-teinte="risque-1"] { --teinte: var(--risque-1); }
+.mesure[data-teinte="risque-2"] { --teinte: var(--risque-2); }
+.mesure[data-teinte="risque-3"] { --teinte: var(--risque-3); }
+.mesure[data-teinte="risque-4"] { --teinte: var(--risque-4); }
+.mesure[data-teinte="risque-5"] { --teinte: var(--risque-5); }
+.mesure[data-teinte="risque-6"] { --teinte: var(--risque-6); }
+
+.mesure .quoi {
+  display: flex; align-items: center; gap: .55rem; margin: 0 0 .7rem;
+  font-size: .66rem; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase;
+  /* L'étiquette prend la teinte, assombrie pour tenir le contraste sur le lavé.
+     Le chiffre, lui, reste à l'encre : c'est lui qu'on lit, pas la couleur. */
+  color: color-mix(in srgb, var(--teinte) 78%, var(--encre));
+}
+.mesure .puce {
+  display: grid; place-items: center; flex: none;
+  width: 2.05rem; height: 2.05rem; border-radius: 9px;
+  background: color-mix(in srgb, var(--teinte) 88%, var(--papier));
+  color: var(--papier);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--teinte) 40%, transparent);
+}
+.mesure .puce .icone { font-size: 1.15rem; }
+/* La flèche du vent tourne dans sa puce, vers où va le vent. */
+.mesure .puce .fleche { transform: rotate(var(--vers, 0deg)); }
+
+.mesure .valeur {
+  display: flex; align-items: baseline; gap: .25rem; margin: 0 0 .3rem;
+  font-size: 2rem; font-weight: 300; line-height: 1; letter-spacing: -.035em;
+  font-variant-numeric: tabular-nums;
+}
+.mesure .valeur .unite { font-size: .42em; font-weight: 400; color: var(--discret);
+                         letter-spacing: 0; }
+.mesure .dit { margin: 0 0 .5rem; font-size: .85rem; color: var(--encre-2); }
+.mesure .appoint {
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  margin: 0; font-size: .74rem; color: var(--discret);
+}
+
+/* Jauge : les crans atteints prennent la teinte de l'état, les autres s'effacent.
+   Le mot à côté dit lequel — la couleur ne porte jamais l'information seule. */
+.jauge { display: flex; gap: 3px; flex: none; }
+.jauge span {
+  width: 12px; height: 5px; border-radius: 2px;
+  background: color-mix(in srgb, var(--encre) 11%, transparent);
+}
+.jauge span.atteint { background: var(--teinte); }
+
+@media (max-width: 58rem) {
+  .console { grid-template-columns: repeat(2, 1fr); }
+  /* Trois cellules sur deux colonnes : la dernière prend la rangée entière plutôt
+     que de laisser un blanc à côté d'elle. */
+  .mesure:nth-child(3) { grid-column: 1 / -1; }
+  .mesure + .mesure { border-left: 0; }
+  .mesure:nth-child(2n) { border-left: 1px solid var(--trait); }
+  .mesure:nth-child(n + 3) { border-top: 1px solid var(--trait); }
+}
+@media (max-width: 34rem) {
+  .console { grid-template-columns: 1fr; }
+  .mesure:nth-child(2n) { border-left: 0; }
+  .mesure + .mesure { border-top: 1px solid var(--trait); }
+}
+
+@media (forced-colors: active) {
+  .mesure::before { display: none; }
+  .jauge span { forced-color-adjust: none; }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Ce qu'annonce chaque Modèle
+   ───────────────────────────────────────────────────────────────── */
+
+.cartes {
+  list-style: none; display: grid; padding: 0; margin: 0 0 .9rem;
+  gap: .7rem; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+}
+.carte {
+  position: relative; min-width: 0; padding: .75rem .85rem .85rem;
+  background: var(--papier); border: 1px solid var(--trait);
+  border-radius: 12px; box-shadow: var(--ombre);
+  transition: border-color .15s, transform .15s;
+}
+.carte::before {
+  content: ""; position: absolute; inset: 0 auto 0 0; width: 3px;
+  border-radius: 12px 0 0 12px; background: var(--teinte);
+}
+.carte.s1 { --teinte: var(--serie-1); }
+.carte.s2 { --teinte: var(--serie-2); }
+.carte.s3 { --teinte: var(--serie-3); }
+.carte.s4 { --teinte: var(--serie-4); }
+.carte.s5 { --teinte: var(--serie-5); }
+.carte.s6 { --teinte: var(--serie-6); }
+.carte.conseille { border-color: var(--trait-fort); }
+
+.carte .entete { display: flex; justify-content: space-between; align-items: baseline;
+                 gap: .4rem; padding-left: .35rem; }
+.carte .nom { font-weight: 650; font-size: .88rem; letter-spacing: -.005em; }
+.carte .maille { font-size: .68rem; color: var(--discret); white-space: nowrap;
+                 font-variant-numeric: tabular-nums; }
+
+.carte .lecture { display: flex; align-items: center; justify-content: space-between;
+                  gap: .5rem; padding-left: .35rem; margin: .35rem 0 .5rem; }
+.carte .valeur { font-size: 2.15rem; font-weight: 300; line-height: 1;
+                 letter-spacing: -.04em; font-variant-numeric: tabular-nums; margin: 0; }
+.carte .valeur .unite { font-size: .5em; font-weight: 400; color: var(--discret); }
+.carte .icone-temps { font-size: 1.9rem; color: var(--encre-2); flex: none; }
+
+.carte .detail { margin: 0; font-size: .74rem; padding-left: .35rem; }
+.carte .detail dt { color: var(--discret); }
+.carte .detail dd { margin: 0 0 .3rem; color: var(--encre-2);
+                    font-variant-numeric: tabular-nums; white-space: nowrap; }
+.carte .detail dd:last-child { margin-bottom: 0; }
+.carte .pluie { color: var(--serie-1); font-weight: 600; }
+.carte .badge {
+  display: inline-block; margin: .6rem 0 0 .35rem; padding: .15rem .45rem;
+  border-radius: 4px; background: var(--accent-doux); color: var(--accent);
+  font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  white-space: nowrap;
+}
+
+/* Toute la carte est cliquable : le bouton la recouvre, le contenu reste lisible. */
+.carte .ouvrir { position: absolute; inset: 0; width: 100%; padding: 0;
+                 background: transparent; border: 0; border-radius: 12px;
+                 cursor: pointer; }
+.carte .ouvrir:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.carte:hover { border-color: var(--trait-fort); transform: translateY(-1px); }
+.carte[data-ouvert="true"] { border-color: var(--accent); }
+
+/* Détail horaire */
+.detail-horaire {
+  margin: 0 0 1rem; padding: 1rem 1.1rem;
+  background: var(--papier); border: 1px solid var(--trait); border-radius: 12px;
+  box-shadow: var(--ombre);
+}
+.detail-horaire h3 { margin: 0 0 .8rem; font-size: .9rem; font-weight: 650; }
+.detail-horaire .note { margin: -.4rem 0 .9rem; font-size: .8rem; color: var(--discret); }
+/* Celle-ci ferme le panneau plutôt que de l'ouvrir : elle prend le filet de la
+   semaine, à la place de la semaine qui manque. */
+.detail-horaire .note.fin-portee {
+  margin: 1.3rem 0 0; padding-top: 1.1rem; border-top: 1px solid var(--trait);
+}
+.detail-horaire .jour + .jour { margin-top: 1rem; }
+.detail-horaire .libelle {
+  margin: 0 0 .35rem; font-size: .68rem; color: var(--discret);
+  text-transform: uppercase; letter-spacing: .11em; font-weight: 650;
+}
+/* Les heures défilent horizontalement plutôt que d'empiler 72 lignes. */
+.bande { display: flex; gap: .12rem; overflow-x: auto; padding-bottom: .35rem; }
+/* 2,6 rem laisse tenir les 24 heures d'une journée sans défilement sur écran
+   large ; en dessous, la bande défile plutôt que de se replier. */
+.bande .heure {
+  display: flex; flex-direction: column; align-items: center; gap: .1rem;
+  min-width: 2.6rem; padding: .35rem .1rem .3rem; border-radius: 7px;
+  font-variant-numeric: tabular-nums;
+}
+.bande .heure[data-nuit] { background: color-mix(in srgb, var(--encre) 6%, transparent); }
+.bande .heure[data-mouille] { background: color-mix(in srgb, var(--serie-1) 13%, transparent); }
+.bande .quand { font-size: .66rem; color: var(--discret); }
+.bande .icone-temps { font-size: 1.05rem; color: var(--encre-2); margin: .1rem 0; }
+.bande .temp { font-size: .85rem; font-weight: 600; }
+.bande .mm { font-size: .64rem; color: var(--serie-1); font-weight: 600; min-height: 1em; }
+.bande .mm.sec { color: transparent; }
+
+/* La suite de la semaine : une ligne par journée, sous le détail horaire.
+   La barre est cadrée sur l'amplitude des journées affichées — elle compare les
+   jours entre eux, jamais ce Modèle à un autre. Les deux températures restent
+   écrites : la barre appuie la lecture, elle ne la porte pas. */
+.semaine { margin-top: 1.3rem; padding-top: 1.1rem; border-top: 1px solid var(--trait); }
+.semaine .libelle {
+  margin: 0 0 .5rem; font-size: .68rem; color: var(--discret);
+  text-transform: uppercase; letter-spacing: .11em; font-weight: 650;
+}
+.semaine ul { list-style: none; margin: 0; padding: 0; }
+.semaine li {
+  display: grid; align-items: center; gap: .7rem;
+  grid-template-columns: 6.6rem 1.3rem 2.1rem minmax(3rem, 1fr) 2.1rem 3.6rem;
+  padding: .4rem .3rem; border-radius: 7px;
+  font-variant-numeric: tabular-nums;
+}
+.semaine li:nth-child(2n) { background: color-mix(in srgb, var(--encre) 4%, transparent); }
+.semaine .quand { font-size: .84rem; font-weight: 550; }
+.semaine .icone-temps { font-size: 1.25rem; color: var(--encre-2); }
+.semaine .mini { font-size: .84rem; color: var(--discret); text-align: right; }
+.semaine .maxi { font-size: .84rem; font-weight: 650; }
+.semaine .amplitude {
+  position: relative; height: 5px; border-radius: 3px;
+  background: color-mix(in srgb, var(--encre) 8%, transparent);
+}
+.semaine .amplitude > span {
+  position: absolute; top: 0; bottom: 0; border-radius: 3px;
+  background: var(--encre-2); opacity: .55;
+}
+.semaine .mm { font-size: .74rem; color: var(--serie-1); font-weight: 600; text-align: right; }
+.semaine .mm.sec { color: transparent; }
+
+@media (max-width: 34rem) {
+  /* La barre est le seul élément dont on peut se passer : les deux températures
+     disent déjà tout ce qu'elle montre. */
+  .semaine li { grid-template-columns: 1fr 1.3rem 2.1rem 2.1rem 3.4rem; gap: .5rem; }
+  .semaine .amplitude { display: none; }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Réglages
+   ───────────────────────────────────────────────────────────────── */
+
+.reglages {
+  display: grid; gap: .8rem; align-items: end;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  padding: 1.1rem 1.2rem; margin-bottom: 1rem;
+  background: var(--papier); border: 1px solid var(--trait); border-radius: 12px;
+  box-shadow: var(--ombre);
+}
+/* min-width:0 est indispensable : sans lui, un select adopte la largeur de sa
+   plus longue option et élargit toute la page sur petit écran. */
+label {
+  display: flex; flex-direction: column; gap: .3rem; min-width: 0;
+  font-size: .68rem; font-weight: 650; color: var(--discret);
+  text-transform: uppercase; letter-spacing: .11em;
+}
+select, button {
+  font: inherit; font-size: .9rem; font-weight: 400; letter-spacing: normal;
+  text-transform: none; padding: .45rem .6rem;
+  border: 1px solid var(--trait-fort); border-radius: 8px;
+  background: var(--papier); color: var(--encre);
+}
+select { width: 100%; min-width: 0; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.position { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center;
+            margin: 0 0 1.75rem; padding: 0 .2rem; }
+.position button { background: var(--accent); color: var(--sur-accent);
+                   border-color: transparent;
+                   padding-inline: .95rem; font-weight: 600; }
+.position button:disabled { opacity: .55; cursor: default; }
+.position .etat { font-size: .84rem; color: var(--discret); min-width: 0; }
+
+.rattachement {
+  margin: 0 0 1.75rem; padding: .9rem 1.1rem; border-radius: 12px;
+  background: var(--papier); border: 1px solid var(--trait); font-size: .875rem;
+  box-shadow: var(--ombre);
+}
+.rattachement.refus { border-left: 3px solid var(--accent); }
+.rattachement h3 { margin: 0 0 .35rem; font-size: .95rem; font-weight: 650; }
+.rattachement ul { margin: .5rem 0 0; padding-left: 1.1rem; color: var(--discret); }
+.rattachement a { color: var(--accent); }
+
+/* ─────────────────────────────────────────────────────────────────
+   Le verdict — la seule prose de la page, donc la seule en romain.
+   ───────────────────────────────────────────────────────────────── */
+
+.verdict { margin: 0 0 2.5rem; padding: 1.4rem 1.4rem 1.2rem;
+           background: var(--papier); border: 1px solid var(--trait);
+           border-radius: 12px; box-shadow: var(--ombre); }
+.reponse {
+  font-family: var(--serif); font-size: clamp(1.35rem, 3.4vw, 1.85rem);
+  font-weight: 400; line-height: 1.28; letter-spacing: -.01em; margin: 0 0 .5rem;
+}
+/* Le nom du Modèle reste à l'encre : trois des six teintes ne passent pas le
+   contraste en texte (ADR 0006). La pastille porte l'identité, pas le mot. Et il
+   passe au grotesque : c'est un identifiant, pas un mot de la phrase. */
+.reponse em {
+  font-family: var(--grotesque); font-style: normal; font-weight: 650;
+  font-size: .82em; letter-spacing: -.005em; white-space: nowrap;
+}
+.reponse .pastille { width: 10px; height: 10px; margin-right: .4rem; }
+.assise { color: var(--discret); font-size: .85rem; margin: 0; line-height: 1.5; }
+
+table { width: 100%; border-collapse: collapse; margin-top: 1.4rem; font-size: .9rem;
+        font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: .55rem .6rem; border-bottom: 1px solid var(--trait); }
+th:first-child, td:first-child { text-align: left; }
+th {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .11em;
+  color: var(--discret); font-weight: 650;
+}
+tbody tr:last-child td { border-bottom: 0; }
+tr.gagnant td { font-weight: 650; }
+.pastille {
+  display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+  margin-right: .5rem; vertical-align: baseline;
+}
+.pastille.s1 { background: var(--serie-1); }
+.pastille.s2 { background: var(--serie-2); }
+.pastille.s3 { background: var(--serie-3); }
+.pastille.s4 { background: var(--serie-4); }
+.pastille.s5 { background: var(--serie-5); }
+.pastille.s6 { background: var(--serie-6); }
+.marque { color: var(--discret); font-size: .72rem; font-weight: 400;
+          margin-left: .45rem; text-transform: uppercase; letter-spacing: .07em; }
+
+.renvoi { margin: 0; padding: 0 .2rem; }
+.renvoi a { color: var(--accent); }
+
+.vide {
+  padding: 2.5rem 1.4rem; text-align: center;
+  background: var(--papier); border: 1px solid var(--trait); border-radius: 12px;
+  box-shadow: var(--ombre);
+}
+.vide h2 { font-family: var(--serif); font-size: 1.5rem; font-weight: 400; margin: 0 0 .5rem; }
+.vide p { margin: 0 auto; max-width: 28rem; color: var(--discret); font-size: .9rem; }
+
+.defilable { overflow-x: auto; }
+
+section { margin: 0 0 2.5rem; }
+.section-cadre {
+  padding: 1.3rem 1.4rem; background: var(--papier);
+  border: 1px solid var(--trait); border-radius: 12px; box-shadow: var(--ombre);
+}
+.section-cadre h2 { font-size: 1rem; font-weight: 650; line-height: 1.35;
+                    letter-spacing: -.01em; margin: 0 0 .5rem; color: var(--encre); }
+
+.donnees { display: flex; flex-wrap: wrap; gap: .8rem; align-items: center;
+           padding: 0 .2rem; }
+.donnees button { background: transparent; color: var(--encre-2); font-size: .86rem; }
+.donnees button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.donnees button:disabled { opacity: .5; cursor: default; }
+.donnees .etat { font-size: .82rem; color: var(--discret); min-width: 0; }
+
+footer {
+  margin-top: 3rem; padding: 1.25rem .2rem 0; border-top: 1px solid var(--trait);
+  color: var(--discret); font-size: .82rem;
+}
+footer a { color: var(--encre-2); }
+
+/* Sous cette largeur le relevé du jour passe à la ligne : le filet qui le
+   séparait de la phrase n'a plus rien à séparer. */
+@media (max-width: 52rem) {
+  .ciel .journee { padding-left: 0; border-left: 0; margin-top: .9rem; }
+  .rail .titre { flex-direction: column; gap: .2rem; }
+}
+
+@media (max-width: 34rem) {
+  .ciel { padding: 1.5rem 0 1.1rem; border-radius: 0 0 14px 14px; }
+  .cartes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ciel .releve { gap: 1rem; }
+  .ciel .icone-temps { font-size: 3.4rem; }
+  .rail { margin-inline: -.3rem; }
+}
+
+@media (forced-colors: active) {
+  .carte::before, .rail .point, .pastille { forced-color-adjust: none; }
+  .ciel { color: CanvasText; background: Canvas; }
+}

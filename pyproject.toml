@@ -1,0 +1,43 @@
+[project]
+name = "meteo"
+version = "0.1.0"
+description = "Quel modèle de prévision météo faut-il croire, ici, chez toi"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "sqlalchemy>=2.0.36",
+    "psycopg[binary]>=3.2",
+    "httpx>=0.28",
+    "numpy>=2.1",
+    "typer>=0.15",
+    "jinja2>=3.1",
+    "pydantic-settings>=2.6",
+]
+
+[project.scripts]
+meteo = "meteo.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/meteo"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
