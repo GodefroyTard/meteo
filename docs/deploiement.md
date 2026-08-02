@@ -171,7 +171,9 @@ Le premier démarrage construit l'image (quelques minutes) puis Caddy demande le
 ```bash
 docker compose ps                                    # les 4 services « Up »
 docker compose logs proxy | grep -i certificate      # « certificate obtained successfully »
-curl -I https://meteo.mondomaine.fr                  # HTTP/2 200
+# Une requête GET, pas HEAD : l'application ne déclare que GET, et « curl -I »
+# répondrait 405 sur une page pourtant parfaitement servie.
+curl -sS -o /dev/null -w '%{http_code}\n' https://meteo.mondomaine.fr   # 200
 docker compose logs lot                              # « Lot planifié en place »
 ```
 
@@ -257,5 +259,7 @@ docker compose up -d --build lot
 | Aucune observation collectée | l'IP du VPS n'est pas déclarée chez Infoclimat |
 | Le lot échoue avec une erreur de connexion | `METEO_DSN` a été forcé dans le `.env` ; laissez le compose le définir |
 | `failed to resolve host '…@db'` | un `METEO_MDP_BASE` entre guillemets, ou une version du code antérieure au passage par `PGPASSWORD` : faites `git pull` puis `docker compose up -d --build` |
+| La page climat annonce « aucune série longue » | `meteo climatologie` n'a pas encore tourné, ou a échoué faute d'accès à data.gouv.fr |
+| `curl -I` répond 405 sur une page qui s'affiche | `-I` envoie une requête HEAD ; l'application ne déclare que GET. Un 405 prouve d'ailleurs que la route existe, là où un 404 dirait le contraire |
 | `docker compose up` ne démarre que 2 services | `COMPOSE_PROFILES=vps` manque dans le `.env` |
 | Le site est inaccessible depuis l'extérieur | `sudo ufw status` — 80 et 443 doivent être autorisés |
