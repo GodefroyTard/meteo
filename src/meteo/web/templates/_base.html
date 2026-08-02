@@ -209,6 +209,14 @@ document.querySelectorAll(REGLAGES).forEach(function (champ) {
         var params = new URLSearchParams(window.location.search);
         params.set('lat', pos.coords.latitude.toFixed(5));
         params.set('lon', pos.coords.longitude.toFixed(5));
+        // L'altitude du GPS quand l'appareil la donne — souvent sur téléphone, presque
+        // jamais sur ordinateur. Elle vaut mieux que celle du relief modélisé, qui
+        // sous-estime les sommets de plusieurs centaines de mètres : au Grand Veymont,
+        // 1448 m au lieu de 2341, soit près de 6 °C d'écart sur la température ramenée.
+        params.delete('alt');
+        if (pos.coords.altitude !== null && isFinite(pos.coords.altitude)) {
+          params.set('alt', Math.round(pos.coords.altitude));
+        }
         params.delete('station');
         window.location.search = params.toString();
       },

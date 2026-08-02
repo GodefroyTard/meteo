@@ -6,10 +6,20 @@
   {% if ciel %}
     <header class="ciel" data-temps="{{ ciel.temps.famille }}"{% if ciel.nuit %} data-nuit{% endif %}>
       <div class="dedans">
+        {# Géolocalisé, on nomme la commune de l'utilisateur et l'altitude réellement
+           employée pour la prévision — pas la station, qui est ailleurs et à une autre
+           hauteur. La station reste nommée plus bas, là où elle sert vraiment : elle
+           dit quel modèle croire, elle ne dit pas le temps qu'il fait ici. #}
         <p class="lieu">
-          {{ station_nom or "Votre position" }}
-          {%- if station_altitude is not none %}
-            <span class="altitude">{{ station_altitude | round | int }} m</span>
+          {{ lieu_nom }}
+          {%- if lieu_altitude is not none %}
+            <span class="altitude">{{ lieu_altitude | round | int }} m</span>
+          {%- endif %}
+          {%- if position %}
+            <span class="provenance-altitude">
+              {{- "altitude de votre appareil" if altitude_mesuree
+                  else "altitude du relief modélisé" -}}
+            </span>
           {%- endif %}
         </p>
 
@@ -27,7 +37,9 @@
             <p class="source">
               {% if ciel.conseille %}
                 {{ "Température selon" if ciel.temps_modele else "Selon" }}
-                <b>{{ ciel.modele }}</b>, le modèle qui se trompe le moins ici.
+                <b>{{ ciel.modele }}</b>, le modèle qui se trompe le moins ici
+                {%- if position and case %}, d'après les mesures de la station de
+                  <b>{{ case.station_nom }}</b>{% endif %}.
               {% else %}
                 {{ "Température selon" if ciel.temps_modele else "Selon" }}
                 <b>{{ ciel.modele }}</b> — aucun verdict ne départage les modèles ici,

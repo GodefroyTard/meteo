@@ -868,3 +868,16 @@ footer a { color: var(--encre-2); }
   padding-top: .9rem;
   margin-top: .2rem;
 }
+
+/* Provenance de l'altitude, à la suite du nom du lieu. Discrète : elle ne se lit
+   que si l'on se demande d'où sort le chiffre — mais alors elle répond, au lieu de
+   laisser croire à une mesure là où il n'y a qu'un relief modélisé.
+   Le parent est en flex : la mention passe d'elle-même à la ligne sur écran
+   étroit, sans qu'il faille la forcer. */
+.ciel .lieu .provenance-altitude {
+  font-size: .68rem;
+  font-weight: 400;
+  letter-spacing: .02em;
+  text-transform: none;
+  opacity: .72;
+}

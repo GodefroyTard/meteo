@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from meteo.api import lecture
+from meteo.collecte import lieux
 from meteo.collecte.climatologie import ATTRIBUTION as ATTRIBUTION_CLIMAT
 from meteo.collecte.open_meteo import (
     FUSEAU,
@@ -198,11 +199,21 @@ def api_verification(
 
 
 def _point(
-    stations: list, station_choisie: str | None, lat: float | None, lon: float | None
+    stations: list,
+    station_choisie: str | None,
+    lat: float | None,
+    lon: float | None,
+    alt: float | None = None,
 ) -> tuple[float, float, float] | None:
-    """Où l'on se tient : latitude, longitude, altitude. Une position prime sur une Station."""
+    """Où l'on se tient : latitude, longitude, altitude. Une position prime sur une Station.
+
+    L'altitude mesurée par l'appareil l'emporte sur celle du relief modélisé. Ce dernier
+    lisse fortement les sommets — 1448 m au Grand Veymont pour 2341 m réels — et cet
+    écart se paierait deux fois : sur la température ramenée à l'altitude (ADR 0002) et
+    sur le rattachement, qui compte 100 m de dénivelé comme 10 km de distance.
+    """
     if lat is not None and lon is not None:
-        return lat, lon, altitude_du_point(lat, lon)
+        return lat, lon, alt if alt is not None else altitude_du_point(lat, lon)
     station = next((s for s in stations if s.code == station_choisie), None)
     if station is None:
         return None
@@ -215,6 +226,7 @@ def _cartes(
     lat: float | None,
     lon: float | None,
     case: lecture.CaseVerdict | None,
+    alt: float | None = None,
 ) -> list[dict]:
     """Ce que chaque Modèle annonce en ce moment, au point de l'utilisateur.
 
@@ -224,7 +236,7 @@ def _cartes(
     Les Modèles conseillés passent en premier, mais chacun garde sa couleur : un
     changement de saison ou d'anticipation réordonne les cartes sans les repeindre.
     """
-    point = _point(stations, station_choisie, lat, lon)
+    point = _point(stations, station_choisie, lat, lon, alt)
     if point is None:
         return []
     latitude, longitude, altitude = point
@@ -635,7 +647,7 @@ combinaisons se règlent sur la page de fiabilité, à qui elles appartiennent.
 """
 
 
-def _lieu(station: str | None, lat: float | None, lon: float | None):
+def _lieu(station: str | None, lat: float | None, lon: float | None, alt: float | None = None):
     """Résout le lieu commun aux deux pages.
 
     Une position prime sur un choix manuel de Station : c'est la promesse « chez toi ».
@@ -646,14 +658,31 @@ def _lieu(station: str | None, lat: float | None, lon: float | None):
 
     resultat = None
     if lat is not None and lon is not None:
-        resultat = lecture.rattachement(lat, lon, altitude_du_point(lat, lon))
+        altitude = alt if alt is not None else altitude_du_point(lat, lon)
+        resultat = lecture.rattachement(lat, lon, altitude)
         choisie = resultat.reference.code if resultat.reference else None
-        lien = "?" + urlencode({"lat": lat, "lon": lon})
+        position = {"lat": lat, "lon": lon}
+        if alt is not None:
+            position["alt"] = alt
+        lien = "?" + urlencode(position)
     else:
         choisie = station or (toutes[0].code if toutes else None)
         lien = "?" + urlencode({"station": choisie}) if choisie else ""
 
     return toutes, choisie, resultat, lien
+
+
+def _nom_du_lieu(point, station_nom: str | None, geolocalise: bool) -> str:
+    """Ce qu'on écrit en tête de page.
+
+    Géolocalisé, c'est la commune de l'utilisateur — pas la Station qui lui sert de
+    référence. Les confondre laisserait croire que la prévision affichée est celle de
+    la Station, alors qu'elle est calculée pour le point exact.
+    """
+    if not geolocalise:
+        return station_nom or "Votre position"
+    trouvee = lieux.commune(point[0], point[1]) if point else None
+    return trouvee.nom if trouvee else "Votre position"
 
 
 def _menu(page: str, action: str, lieu, position, reglages: dict) -> dict:
@@ -686,9 +715,10 @@ def previsions(
     station: str | None = None,
     lat: float | None = Query(None, ge=-90, le=90),
     lon: float | None = Query(None, ge=-180, le=180),
+    alt: float | None = Query(None, ge=-500, le=9000),
 ) -> HTMLResponse:
     """La météo elle-même : ce que chaque Modèle annonce pour ce lieu, maintenant."""
-    lieu = _lieu(station, lat, lon)
+    lieu = _lieu(station, lat, lon, alt)
     toutes, choisie, _, _ = lieu
     saison_courante = saison_de(date.today())
 
@@ -697,8 +727,8 @@ def previsions(
         if choisie
         else None
     )
-    cartes = _cartes(toutes, choisie, lat, lon, case)
-    point = _point(toutes, choisie, lat, lon)
+    cartes = _cartes(toutes, choisie, lat, lon, case, alt)
+    point = _point(toutes, choisie, lat, lon, alt)
     position = (lat, lon) if lat is not None and lon is not None else None
 
     return gabarits.TemplateResponse(
@@ -708,6 +738,13 @@ def previsions(
             **_menu("previsions", "/", lieu, position, {}),
             "station_nom": next((s.nom for s in toutes if s.code == choisie), None),
             "station_altitude": next((s.altitude for s in toutes if s.code == choisie), None),
+            "lieu_nom": _nom_du_lieu(
+                point,
+                next((s.nom for s in toutes if s.code == choisie), None),
+                geolocalise=position is not None,
+            ),
+            "lieu_altitude": point[2] if point else None,
+            "altitude_mesuree": alt is not None,
             "case": case,
             "anticipation": ANTICIPATION_CONSEIL,
             "saison": saison_courante,
@@ -729,13 +766,14 @@ def fiabilite(
     station: str | None = None,
     lat: float | None = Query(None, ge=-90, le=90),
     lon: float | None = Query(None, ge=-180, le=180),
+    alt: float | None = Query(None, ge=-500, le=9000),
     variable: str = TEMPERATURE,
     anticipation: int = Query(1, ge=1, le=ANTICIPATION_MAX),
     saison: str | None = None,
     jours: int = Query(14, ge=1, le=90),
 ) -> HTMLResponse:
     """Le jugement : quel Modèle se trompe le moins ici, et sur quelles mesures."""
-    lieu = _lieu(station, lat, lon)
+    lieu = _lieu(station, lat, lon, alt)
     _, choisie, _, _ = lieu
     variable = _variable(variable)
     saison_choisie = _saison(saison)
@@ -1068,13 +1106,14 @@ def climat(
     station: str | None = None,
     lat: float | None = Query(None, ge=-90, le=90),
     lon: float | None = Query(None, ge=-180, le=180),
+    alt: float | None = Query(None, ge=-500, le=9000),
     poste: str | None = None,
     jour: str | None = None,
 ) -> HTMLResponse:
     """La mémoire du lieu : ce qu'un jour de l'année pesait, année après année."""
-    lieu = _lieu(station, lat, lon)
+    lieu = _lieu(station, lat, lon, alt)
     toutes, choisie, _, _ = lieu
-    point = _point(toutes, choisie, lat, lon)
+    point = _point(toutes, choisie, lat, lon, alt)
 
     postes = lecture.postes_utilisables()
     rattache = lecture.rattachement_climatique(*point) if point else None

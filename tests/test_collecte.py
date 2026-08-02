@@ -3,6 +3,7 @@ from datetime import date
 
 import pytest
 
+from meteo.collecte import lieux
 from meteo.collecte.climatologie import (
     MESURES_AUTRES,
     MESURES_TEMPERATURES,
@@ -117,3 +118,19 @@ class TestFormat:
         flux = io.StringIO("AAAAMMJJ;TN;QTN\n19700802;8.4;1\n")
         with pytest.raises(FormatInattendu, match="NUM_POSTE"):
             list(lire_csv(flux, ("TN",)))
+
+
+class TestCommune:
+    def test_la_premiere_commune_est_retenue(self):
+        corps = [{"nom": "Gresse-en-Vercors", "codeDepartement": "38"}]
+        c = lieux.lire_reponse(corps)
+        assert c.nom == "Gresse-en-Vercors"
+        assert c.departement == "38"
+
+    def test_hors_de_france_la_reponse_est_vide(self):
+        # L'API rend une liste vide : la page retombe alors sur « Votre position »,
+        # ce qui est vrai et suffisant.
+        assert lieux.lire_reponse([]) is None
+
+    def test_une_commune_sans_nom_ne_nomme_rien(self):
+        assert lieux.lire_reponse([{"codeDepartement": "38"}]) is None
