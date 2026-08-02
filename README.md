@@ -22,7 +22,7 @@ uv run meteo stations         # importe le référentiel StatIC, fixe le périm�
 uv run meteo previsions       # backfill Open-Meteo (long : ~2 h sur 2 ans et demi)
 uv run meteo observations     # backfill Infoclimat — voir la contrainte d'IP ci-dessous
 uv run meteo verdicts         # recalcule tout et remplace la table
-uv run meteo climatologie     # séries longues Météo-France (~1 min, aucun jeton)
+uv run meteo climatologie     # séries longues Météo-France (~2 min, aucun jeton)
 uv run meteo servir           # http://127.0.0.1:8000
 ```
 
@@ -91,8 +91,10 @@ ces limites, ne les desserrez pas.
 
 **Météo-France** fournit les séries longues, par le jeu « Données climatologiques de base -
 quotidiennes » publié sur [meteo.data.gouv.fr](https://meteo.data.gouv.fr/) sous licence
-ouverte LOV2. Un fichier par département, sans jeton ni quota : l'Isère entière pèse 18 Mo
-compressés et remonte à 1950, parfois bien avant.
+ouverte LOV2. Deux fichiers par département, sans jeton ni quota : le socle
+température-pluie et l'évapotranspiration potentielle. L'Isère entière pèse 25 Mo
+compressés, remonte à 1950 — parfois bien avant — et donne 2,7 millions de journées pour
+207 postes.
 
 Ces données alimentent la seule page climat et **n'entrent jamais dans un verdict** : un
 maximum quotidien n'est pas comparable à une prévision horaire, et les postes ne sont pas

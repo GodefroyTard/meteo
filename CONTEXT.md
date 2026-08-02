@@ -114,6 +114,26 @@ part de ce qu'un climat stable donnerait — proportionnelle aux années qu'une 
 apporte — jamais en décompte brut, qui confondrait le signal avec la forme du calendrier.
 _Avoid_: Extrême, maximum absolu, pic
 
+**Demande évaporative**:
+L'évapotranspiration potentielle : l'eau que l'atmosphère prendrait à un couvert bien
+alimenté. Calculée par Météo-France, jamais estimée par nous depuis la température — cette
+approximation sous-estime la tendance d'un facteur deux et demi (ADR 0009). Elle existe
+sous deux formes qui ne valent pas la même chose, et la page nomme toujours celle qu'elle
+emploie.
+_Avoid_: Évaporation, ETP sans autre précision, besoin en eau
+
+**Bilan hydrique**:
+Ce que la saison reçoit moins ce qu'elle réclame, de mai à septembre. C'est la grandeur
+qui bouge : ni le cumul de pluie, ni le nombre de jours secs, ni la plus longue série
+sèche ne montrent d'évolution assurée en Isère.
+_Avoid_: Déficit hydrique, stress hydrique, sécheresse tout court
+
+**Saison sèche**:
+Une saison dont l'indice standardisé descend à −1 ou en dessous. L'indice situe la saison
+parmi toutes celles du Poste, par son rang — il ne peut donc pas sortir de l'échantillon,
+et une sécheresse inédite apparaît comme la plus sèche connue, pas au-delà.
+_Avoid_: Année de sécheresse, épisode sec, alerte
+
 **Prolongement**:
 La même Tendance poursuivie au-delà des années mesurées. Ce n'est pas une prévision et ce n'est
 pas un scénario climatique : c'est une droite prolongée, sous l'hypothèse — que rien ne garantit —

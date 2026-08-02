@@ -219,10 +219,24 @@ existantes et ne perd donc aucune donnée :
 docker compose exec -T lot meteo init-base
 ```
 
+**Quand le schéma des séries longues change**
+
+Les tables `poste` et `journee` sont entièrement reconstructibles depuis une source
+publique en deux minutes. Plutôt qu'une migration, on les recrée :
+
+```bash
+docker compose exec -T db psql -U meteo -c "DROP TABLE IF EXISTS journee, poste CASCADE;"
+docker compose exec -T lot meteo init-base
+docker compose exec -T lot meteo climatologie
+```
+
+Rien d'autre n'est touché : les observations, les prévisions et les verdicts vivent dans
+d'autres tables.
+
 **Charger les séries longues Météo-France**
 
 La page climat a besoin des données climatologiques, qui ne sont pas dans le dump si
-celui-ci est antérieur. Le chargement dure quelques minutes et ne demande aucun jeton :
+celui-ci est antérieur. Le chargement dure environ deux minutes, télécharge 25 Mo et ne demande aucun jeton :
 
 ```bash
 docker compose exec -T lot meteo climatologie
