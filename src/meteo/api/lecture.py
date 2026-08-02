@@ -5,13 +5,13 @@ from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import Date, cast, distinct, extract, func, select
 
-from meteo.domaine import qualite
+from meteo.domaine import cycle, indicateurs, qualite, tendance
 from meteo.domaine.modeles import PAR_CLE
-from meteo.domaine.rattachement import Rattachement, rattacher
+from meteo.domaine.rattachement import COUT_MAXIMAL_CLIMAT_KM, Rattachement, rattacher
 from meteo.domaine.saison import Saison, heures_attendues, mois_de
 from meteo.lots.verdicts import periode_observee
 from meteo.stockage.session import session
-from meteo.stockage.tables import Observation, Prevision, Station, Verdict
+from meteo.stockage.tables import Journee, Observation, Poste, Prevision, Station, Verdict
 
 TEMPERATURE = "temperature"
 PLUIE = "pluie"
@@ -399,3 +399,276 @@ def dernier_rafraichissement() -> datetime | None:
     """
     with session() as s:
         return s.execute(select(func.max(Verdict.calcule_le))).scalar_one_or_none()
+
+
+@dataclass(frozen=True)
+class PosteResume:
+    """Un Poste climatologique et l'étendue de ce qu'il a mesuré."""
+
+    numero: str
+    nom: str
+    latitude: float
+    longitude: float
+    altitude: float
+    premiere_annee: int
+    derniere_annee: int
+    annees_pleines: int
+
+    @property
+    def nom_lisible(self) -> str:
+        """Le nom du Poste en casse de titre.
+
+        Météo-France publie « AUTRANS », « GRENOBLE-ST GEOIRS ». On conserve la valeur
+        publiée en base — c'est elle qui fait foi — et on ne l'adoucit qu'à l'affichage,
+        où des capitales criardes rendraient la phrase désagréable à lire.
+        """
+        return self.nom.title()
+
+
+@dataclass(frozen=True)
+class SerieJour:
+    """Ce qu'un Poste a mesuré un jour de l'année, année après année.
+
+    `tendance_max` et `tendance_min` valent None quand la Série ne porte pas assez
+    d'années : la page montre alors le nuage sans droite, plutôt qu'une droite qui
+    n'engage rien.
+    """
+
+    poste: PosteResume
+    mois: int
+    jour: int
+    maxima: tuple[tendance.AnneeAgregee, ...]
+    minima: tuple[tendance.AnneeAgregee, ...]
+    tendance_max: tendance.Tendance | None
+    tendance_min: tendance.Tendance | None
+
+
+@dataclass(frozen=True)
+class SerieCycle:
+    """Toutes les années d'un Poste, superposées sur l'axe des quantièmes."""
+
+    poste: PosteResume
+    annees: tuple[cycle.CycleAnnuel, ...]
+    decennies: tuple[int, ...]
+    """Les années mises en avant : la plus récente, puis de dix en dix."""
+
+
+@dataclass(frozen=True)
+class SerieFranchissement:
+    """Le décompte annuel d'un seuil, et sa pente s'il y a assez d'années."""
+
+    seuil: indicateurs.Seuil
+    annees: tuple[indicateurs.AnneeComptee, ...]
+    tendance: tendance.Tendance | None
+
+
+@dataclass(frozen=True)
+class SerieGel:
+    """Les saisons sans gel d'un Poste, et l'allongement de leur durée."""
+
+    saisons: tuple[indicateurs.SaisonSansGel, ...]
+    tendance: tendance.Tendance | None
+
+
+@dataclass(frozen=True)
+class SerieRecords:
+    """La répartition des records dans le temps, chaud et froid séparés.
+
+    Les deux se lisent ensemble : un climat stable les répartit également, un climat qui
+    se réchauffe voit les records de chaleur s'accumuler à mesure que ceux de froid
+    cessent d'être battus.
+    """
+
+    chaleur: tuple[indicateurs.PartDecennie, ...]
+    froid: tuple[indicateurs.PartDecennie, ...]
+    dernier_chaud: int | None
+    """Année du record de chaleur le plus récent."""
+
+    dernier_froid: int | None
+
+
+@dataclass(frozen=True)
+class DossierClimat:
+    """Tout ce que la page climat montre d'un Poste, chargé en une fois."""
+
+    poste: PosteResume
+    jour: SerieJour
+    cycle: SerieCycle
+    franchissements: tuple[SerieFranchissement, ...]
+    gel: SerieGel
+    records: SerieRecords
+
+
+def _resume_poste(p: Poste) -> PosteResume:
+    return PosteResume(
+        numero=p.numero,
+        nom=p.nom,
+        latitude=p.latitude,
+        longitude=p.longitude,
+        altitude=p.altitude,
+        premiere_annee=p.premiere_annee,
+        derniere_annee=p.derniere_annee,
+        annees_pleines=p.annees_pleines,
+    )
+
+
+def postes_utilisables(minimum: int = tendance.ANNEES_MINIMUM) -> list[PosteResume]:
+    """Les Postes portant assez d'années pleines pour qu'une tendance ait un sens.
+
+    Trier par couverture décroissante n'est pas cosmétique : c'est l'ordre dans lequel
+    on veut qu'un lecteur découvre la liste, la meilleure série d'abord.
+    """
+    with session() as s:
+        lignes = s.execute(
+            select(Poste)
+            .where(Poste.annees_pleines >= minimum)
+            .order_by(Poste.annees_pleines.desc(), Poste.nom)
+        ).scalars()
+        return [_resume_poste(p) for p in lignes]
+
+
+def rattachement_climatique(latitude: float, longitude: float, altitude: float) -> Rattachement:
+    """Le Poste le plus comparable à un lieu, au sens du coût desserré pour le climat."""
+    postes = postes_utilisables()
+    return rattacher(
+        [(p.numero, p.nom, p.latitude, p.longitude, p.altitude) for p in postes],
+        latitude,
+        longitude,
+        altitude,
+        cout_maximal_km=COUT_MAXIMAL_CLIMAT_KM,
+    )
+
+
+def _mois_voisins(mois: int) -> list[int]:
+    """Le mois visé et ses deux voisins.
+
+    La fenêtre ne déborde jamais au-delà : quinze jours centrés ne peuvent toucher que
+    trois mois. Restreindre la requête à ces trois-là évite de rapatrier soixante-quinze
+    ans de mesures pour n'en garder qu'un quinzième.
+    """
+    return sorted({(mois - 2) % 12 + 1, mois, mois % 12 + 1})
+
+
+def _extremes(s, poste_numero: str, mois: list[int] | None = None):
+    """Les minima et maxima d'un Poste, indexés par jour.
+
+    Une seule lecture sert tous les indicateurs de la page : les rapatrier séparément
+    coûterait six fois le même parcours d'index pour six vues des mêmes journées.
+    """
+    conditions = [Journee.poste_numero == poste_numero]
+    if mois is not None:
+        conditions.append(extract("month", Journee.jour).in_(mois))
+    lignes = s.execute(
+        select(Journee.jour, Journee.tn_c, Journee.tx_c).where(*conditions)
+    ).all()
+    minima = {ligne.jour: ligne.tn_c for ligne in lignes if ligne.tn_c is not None}
+    maxima = {ligne.jour: ligne.tx_c for ligne in lignes if ligne.tx_c is not None}
+    return minima, maxima
+
+
+def _serie_jour(resume: PosteResume, minima, maxima, mois: int, jour: int) -> SerieJour:
+    annees = range(resume.premiere_annee, resume.derniere_annee + 1)
+    agregees_max = tendance.agreger(maxima, mois, jour, annees)
+    agregees_min = tendance.agreger(minima, mois, jour, annees)
+    return SerieJour(
+        poste=resume,
+        mois=mois,
+        jour=jour,
+        maxima=tuple(agregees_max),
+        minima=tuple(agregees_min),
+        tendance_max=tendance.ajuster(agregees_max),
+        tendance_min=tendance.ajuster(agregees_min),
+    )
+
+
+def _cycle(resume: PosteResume, minima, maxima) -> SerieCycle:
+    annees = cycle.cycles(cycle.lisser(cycle.moyennes_quotidiennes(minima, maxima)))
+    if not annees:
+        return SerieCycle(poste=resume, annees=(), decennies=())
+    presentes = {a.annee for a in annees}
+    reperes = [
+        annee
+        for annee in cycle.decennies(annees[-1].annee, annees[0].annee)
+        if annee in presentes
+    ]
+    return SerieCycle(poste=resume, annees=tuple(annees), decennies=tuple(reperes))
+
+
+def _pente(valeurs: list[tuple[int, float]]) -> tendance.Tendance | None:
+    """Ajuste une droite sur des couples (année, valeur), quelle que soit l'unité."""
+    return tendance.ajuster(
+        [tendance.AnneeAgregee(annee=a, valeur=v, nb_jours=1) for a, v in valeurs]
+    )
+
+
+def _franchissements(minima, maxima) -> tuple[SerieFranchissement, ...]:
+    series = []
+    for seuil in indicateurs.SEUILS:
+        comptes = indicateurs.compter(
+            minima if seuil.variable == "minima" else maxima, seuil
+        )
+        series.append(
+            SerieFranchissement(
+                seuil=seuil,
+                annees=tuple(comptes),
+                tendance=_pente([(c.annee, float(c.jours)) for c in comptes]),
+            )
+        )
+    return tuple(series)
+
+
+def _gel(minima) -> SerieGel:
+    saisons = indicateurs.saisons_sans_gel(minima)
+    return SerieGel(
+        saisons=tuple(saisons),
+        tendance=_pente([(s.annee, float(s.duree)) for s in saisons]),
+    )
+
+
+def _records(minima, maxima) -> SerieRecords:
+    chauds = indicateurs.records(maxima, au_plus_haut=True)
+    froids = indicateurs.records(minima, au_plus_haut=False)
+    return SerieRecords(
+        chaleur=tuple(indicateurs.parts_par_decennie(maxima, chauds)),
+        froid=tuple(indicateurs.parts_par_decennie(minima, froids)),
+        dernier_chaud=max((r.annee for r in chauds), default=None),
+        dernier_froid=max((r.annee for r in froids), default=None),
+    )
+
+
+def serie_jour(poste_numero: str, mois: int, jour: int) -> SerieJour | None:
+    """Les maxima et minima de ce jour de l'année, année après année, avec leur tendance.
+
+    Lecture restreinte aux trois mois utiles : c'est le point d'entrée de l'API, qui n'a
+    pas besoin du reste. La page, elle, passe par `dossier`.
+    """
+    with session() as s:
+        poste = s.get(Poste, poste_numero)
+        if poste is None:
+            return None
+        resume = _resume_poste(poste)
+        minima, maxima = _extremes(s, poste_numero, _mois_voisins(mois))
+    return _serie_jour(resume, minima, maxima, mois, jour)
+
+
+def dossier(poste_numero: str, mois: int, jour: int) -> DossierClimat | None:
+    """Tout ce que la page climat montre, depuis une seule lecture de la Série longue.
+
+    Rend None si le Poste est inconnu. Un Poste connu mais pauvre rend un dossier aux
+    tendances nulles : les nuages de points restent montrables, les droites non.
+    """
+    with session() as s:
+        poste = s.get(Poste, poste_numero)
+        if poste is None:
+            return None
+        resume = _resume_poste(poste)
+        minima, maxima = _extremes(s, poste_numero)
+
+    return DossierClimat(
+        poste=resume,
+        jour=_serie_jour(resume, minima, maxima, mois, jour),
+        cycle=_cycle(resume, minima, maxima),
+        franchissements=_franchissements(minima, maxima),
+        gel=_gel(minima),
+        records=_records(minima, maxima),
+    )

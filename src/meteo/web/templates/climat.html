@@ -1,0 +1,429 @@
+{% extends "_base.html" %}
+{% block titre %}Climat{% endblock %}
+{% block titre_page %}Climat — la mémoire du lieu{% endblock %}
+
+{% block contenu %}
+  <section>
+    <h2 class="etiquette">Quel jour, quel poste</h2>
+    <form method="get" action="/climat" class="reglages" data-valide-au-changement>
+      <input type="hidden" name="station" value="{{ station_choisie }}">
+      {% if position %}
+        <input type="hidden" name="lat" value="{{ position[0] }}">
+        <input type="hidden" name="lon" value="{{ position[1] }}">
+      {% endif %}
+      <label>Jour de l'année
+        <input type="date" name="jour" value="{{ jour.isoformat() }}">
+      </label>
+      <label>Poste de mesure
+        <select name="poste">
+          {% for p in postes %}
+            <option value="{{ p.numero }}" {% if p.numero == poste_retenu %}selected{% endif %}>
+              {{ p.nom_lisible }} — {{ p.altitude | round | int }} m, {{ p.annees_pleines }} ans
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+      <noscript><button type="submit" class="principal">Voir</button></noscript>
+    </form>
+
+    <div class="verdict">
+      {% if not postes %}
+        <p class="reponse">Aucune série longue n'est chargée.</p>
+        <p class="assise">
+          Les données climatologiques Météo-France s'importent par
+          <code>meteo climatologie</code>. Tant qu'elles manquent, cette page n'a rien
+          à raconter.
+        </p>
+      {% elif not serie %}
+        <p class="reponse">Ce poste est introuvable.</p>
+      {% else %}
+        {% set t_max = serie.tendance_max %}
+        {% set t_min = serie.tendance_min %}
+        <p class="reponse">
+          {% if t_max and t_max.significative %}
+            Le {{ libelle_jour }} à {{ serie.poste.nom_lisible }}, les après-midi se sont
+            réchauffés de <em>{{ "%+.1f" | format(t_max.evolution_totale) }} °C</em>
+            depuis {{ t_max.premiere_annee }}.
+          {% elif t_min and t_min.significative %}
+            Le {{ libelle_jour }} à {{ serie.poste.nom_lisible }}, les nuits se sont réchauffées
+            de <em>{{ "%+.1f" | format(t_min.evolution_totale) }} °C</em>
+            depuis {{ t_min.premiere_annee }}.
+          {% elif t_max or t_min %}
+            Le {{ libelle_jour }} à {{ serie.poste.nom_lisible }}, aucune tendance ne se dégage
+            de façon assurée.
+          {% else %}
+            {{ serie.poste.nom_lisible }} n'a pas assez d'années pour qu'une tendance ait un sens.
+          {% endif %}
+        </p>
+        <p class="assise">
+          {% if t_max or t_min %}
+            Par décennie :
+            {%- if t_max %}
+              maximales {{ "%+.2f" | format(t_max.pente_par_decennie) }} °C
+              (± {{ "%.2f" | format(t_max.incertitude_par_decennie) }}{% if not t_max.significative %}, donc indistinguable de zéro{% endif %}){% endif %}
+            {%- if t_max and t_min %}, {% endif %}
+            {%- if t_min %}
+              minimales {{ "%+.2f" | format(t_min.pente_par_decennie) }} °C
+              (± {{ "%.2f" | format(t_min.incertitude_par_decennie) }}{% if not t_min.significative %}, donc indistinguable de zéro{% endif %}){% endif %}.
+          {% else %}
+            Il faut {{ annees_minimum }} années mesurées pour ajuster une tendance — la
+            durée d'une normale climatique. Ce poste en compte
+            {{ serie.poste.annees_pleines }}.
+          {% endif %}
+        </p>
+        <p class="assise">
+          {{ serie.poste.nom_lisible }}, {{ serie.poste.altitude | round | int }} m,
+          {{ serie.poste.premiere_annee }}-{{ serie.poste.derniere_annee }},
+          {{ serie.poste.annees_pleines }} années pleines.
+          {%- if rattachement_climat and rattachement_climat.reference
+                 and rattachement_climat.reference.code == poste_retenu and point %}
+            Retenu comme le plus comparable à votre lieu :
+            {{ rattachement_climat.reference.distance_km | round | int }} km,
+            {{ "%+.0f" | format(rattachement_climat.reference.denivele_m) }} m de dénivelé.
+          {% endif %}
+        </p>
+      {% endif %}
+    </div>
+  </section>
+
+  {% if serie and donnees %}
+  <section>
+    <div class="section-cadre">
+      <h2>Le {{ libelle_jour }}, année après année</h2>
+      <p class="assise">
+        Chaque point est la moyenne des {{ fenetre_j * 2 + 1 }} jours centrés sur le
+        {{ libelle_jour }} de son année — un jour isolé ne serait que du bruit. La droite
+        est ajustée par moindres carrés sur les points mesurés ; sa bande est l'incertitude
+        à 95 %, et elle s'évase à mesure qu'on s'éloigne des années observées.
+      </p>
+
+      <div class="viz climat" data-climat data-horizon="{{ horizon }}">
+        <div class="viz-cadre">
+          <p class="viz-vide">
+            Le graphe demande JavaScript. Les valeurs restent lisibles dans le tableau
+            ci-dessous.
+          </p>
+        </div>
+        <div class="viz-bulle" role="status" aria-live="polite" data-visible="false"></div>
+        <ul class="viz-legende"></ul>
+
+        <details class="viz-tableau">
+          <summary>Voir les valeurs</summary>
+          <div class="defilable">
+            <table>
+              <thead>
+                <tr><th>Année</th><th>Maximale</th><th>Minimale</th><th>Jours mesurés</th></tr>
+              </thead>
+              <tbody>
+                {% set minima = {} %}
+                {% for a in serie.minima %}{% set _ = minima.update({a.annee: a}) %}{% endfor %}
+                {% for a in serie.maxima %}
+                  <tr>
+                    <td>{{ a.annee }}</td>
+                    <td>{{ "%.1f" | format(a.valeur) }} °C</td>
+                    <td>
+                      {%- if a.annee in minima -%}
+                        {{ "%.1f" | format(minima[a.annee].valeur) }} °C
+                      {%- else -%}—{%- endif -%}
+                    </td>
+                    <td>{{ a.nb_jours }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <script type="application/json" id="climat-donnees">{{ donnees | tojson }}</script>
+      </div>
+
+      <p class="assise mention">
+        Le prolongement au-delà de {{ donnees.derniere_annee_mesuree }} n'est pas une
+        prévision : c'est la même droite, poursuivie jusqu'en {{ horizon }}. Elle suppose
+        que ce qui s'est passé continue au même rythme — ce qu'aucune mesure ne garantit.
+        Un vrai scénario climatique demanderait des modèles de circulation et une
+        trajectoire d'émissions.
+      </p>
+      <p class="assise mention">Source : {{ attribution }}.</p>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if donnees_cycle %}
+  <section>
+    <div class="section-cadre">
+      <h2>Toutes les années, du 1<sup>er</sup> janvier au 31 décembre</h2>
+      <p class="assise">
+        Une courbe par année : la température moyenne du jour, lissée sur
+        {{ lissage_j }} jours pour retirer le temps qu'il fait et ne laisser que la saison.
+        Les {{ donnees_cycle.annees | length }} années mesurées sont toutes tracées, en
+        pâle — c'est leur épaisseur qui montre ce qu'une année peut faire. Se détachent
+        {{ donnees_cycle.decennies | first }} et chaque décennie qui la précède, de la
+        plus ancienne en clair à la plus récente en foncé.
+      </p>
+
+      <div class="viz cycle" data-cycle>
+        <div class="viz-cadre">
+          <p class="viz-vide">
+            Le graphe demande JavaScript. Les moyennes mensuelles des décennies
+            restent lisibles dans le tableau ci-dessous.
+          </p>
+        </div>
+        <div class="viz-bulle" role="status" aria-live="polite" data-visible="false"></div>
+        <ul class="viz-legende"></ul>
+
+        <details class="viz-tableau">
+          <summary>Voir les moyennes mensuelles</summary>
+          <div class="defilable">
+            <table>
+              <thead>
+                <tr>
+                  <th>Année</th>
+                  {% for m in noms_mois %}<th>{{ m }}</th>{% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                {% for ligne in mensuelles | reverse %}
+                  <tr>
+                    <td>{{ ligne.annee }}</td>
+                    {% for v in ligne.valeurs %}
+                      <td>{{ "%.1f" | format(v) if v is not none else "—" }}</td>
+                    {% endfor %}
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <script type="application/json" id="cycle-donnees">{{ donnees_cycle | tojson }}</script>
+      </div>
+
+      <p class="assise mention">
+        La moyenne du jour est la demi-somme du minimum et du maximum, définition retenue
+        par Météo-France. Le lissage déplace les extrêmes : une canicule de trois jours
+        n'apparaît pas ici, elle se lit sur le graphe précédent en choisissant sa date.
+      </p>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if donnees_seuils %}
+  <section>
+    <div class="section-cadre">
+      <h2>Combien de jours par an franchissent un seuil</h2>
+      <p class="assise">
+        {% set gel_serie = franchissements | selectattr("seuil.cle", "equalto", "gel") | first %}
+        {% if gel_serie and gel_serie.tendance and gel_serie.tendance.significative %}
+          À {{ serie.poste.nom_lisible }}, le gel perd
+          <em>{{ "%.1f" | format(-gel_serie.tendance.pente_par_decennie) }} jours par
+          décennie</em> — {{ (gel_serie.annees | first).jours }} en
+          {{ (gel_serie.annees | first).annee }},
+          {{ (gel_serie.annees | last).jours }} en
+          {{ (gel_serie.annees | last).annee }}.
+        {% endif %}
+        Un comptage résiste bien mieux qu'une moyenne à un changement d'instrument, et
+        il se vérifie à la main. Les trois seuils partagent l'axe : ils comptent tous
+        des jours.
+      </p>
+
+      <div class="viz seuils" data-seuils>
+        <div class="viz-cadre">
+          <p class="viz-vide">
+            Le graphe demande JavaScript. Les décomptes restent lisibles dans le tableau
+            ci-dessous.
+          </p>
+        </div>
+        <div class="viz-bulle" role="status" aria-live="polite" data-visible="false"></div>
+        <ul class="viz-legende"></ul>
+
+        <details class="viz-tableau">
+          <summary>Voir les décomptes</summary>
+          <div class="defilable">
+            <table>
+              <thead>
+                <tr>
+                  <th>Année</th>
+                  {% for s in donnees_seuils.seuils %}<th>{{ s.nom }}</th>{% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                {% set index = {} %}
+                {% for s in franchissements %}
+                  {% for a in s.annees %}
+                    {% set _ = index.update({(s.seuil.cle, a.annee): a.jours}) %}
+                  {% endfor %}
+                {% endfor %}
+                {% for a in (franchissements | first).annees | reverse %}
+                  <tr>
+                    <td>{{ a.annee }}</td>
+                    {% for s in franchissements %}
+                      <td>{{ index.get((s.seuil.cle, a.annee), "—") }}</td>
+                    {% endfor %}
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <script type="application/json" id="seuils-donnees">{{ donnees_seuils | tojson }}</script>
+      </div>
+
+      <p class="assise mention">
+        {% for s in franchissements %}
+          {{ s.seuil.nom }} : {{ s.seuil.definition }}{{ "." if loop.last else " ; " }}
+        {%- endfor %}
+        Seules les années comptant au moins {{ annee_pleine_j }} journées mesurées entrent
+        dans le décompte — une année lacunaire produirait mécaniquement moins de jours et
+        dessinerait une fausse accalmie. Les droites s'arrêtent à la dernière année
+        mesurée : prolonger un comptage finirait par annoncer un nombre de jours négatif.
+      </p>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if donnees_gel %}
+  <section>
+    <div class="section-cadre">
+      <h2>La saison sans gel</h2>
+      <p class="assise">
+        {% if gel.tendance and gel.tendance.significative %}
+          À {{ serie.poste.nom_lisible }}, la saison sans gel s'est allongée de
+          <em>{{ "%.0f" | format(gel.tendance.evolution_totale) }} jours</em> depuis
+          {{ (gel.saisons | first).annee }}, soit
+          {{ "%+.1f" | format(gel.tendance.pente_par_decennie) }} jours par décennie.
+        {% endif %}
+        Chaque ligne est une année ; les segments colorés sont les périodes où le gel est
+        encore possible. C'est le chenal entre les deux qui s'élargit.
+      </p>
+
+      <div class="viz gel" data-gel>
+        <div class="viz-cadre">
+          <p class="viz-vide">
+            Le graphe demande JavaScript. Les dates restent lisibles dans le tableau
+            ci-dessous.
+          </p>
+        </div>
+        <div class="viz-bulle" role="status" aria-live="polite" data-visible="false"></div>
+
+        <details class="viz-tableau">
+          <summary>Voir les dates</summary>
+          <div class="defilable">
+            <table>
+              <thead>
+                <tr>
+                  <th>Année</th><th>Dernier gel</th><th>Premier gel</th><th>Jours sans gel</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for s in gel.saisons | reverse %}
+                  <tr>
+                    <td>{{ s.annee }}</td>
+                    <td>{{ s.dernier_gel | quantieme }}</td>
+                    <td>{{ s.premier_gel | quantieme }}</td>
+                    <td>{{ s.duree }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <script type="application/json" id="gel-donnees">{{ donnees_gel | tojson }}</script>
+      </div>
+
+      <p class="assise mention">
+        Le dernier gel de printemps et le premier gel d'automne sont les jours où la
+        température minimale est passée sous 0 °C, de part et d'autre du 1<sup>er</sup>
+        juillet. Une année sans aucun gel de printemps ou d'automne est omise : sa saison
+        déborde de l'année civile, et la borner au 1<sup>er</sup> janvier inventerait une
+        date que la mesure ne donne pas.
+      </p>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if donnees_records %}
+  <section>
+    <div class="section-cadre">
+      <h2>Qui détient les records</h2>
+      <p class="assise">
+        {% set derniere = donnees_records.decennies | last %}
+        {% if records.dernier_froid %}
+          À {{ serie.poste.nom_lisible }}, le dernier record de froid remonte à
+          <em>{{ records.dernier_froid }}</em>.
+        {% endif %}
+        {% if derniere.chaleur and derniere.chaleur.remarquable %}
+          Les années {{ derniere.decennie }} détiennent
+          <em>{{ "%.2f" | format(derniere.chaleur.indice) }} fois</em> leur part de
+          records de chaleur
+          {%- if derniere.froid %}
+            {%- if derniere.froid.records == 0 %}, et pas un seul record de froid
+            {%- else %}, contre {{ "%.2f" | format(derniere.froid.indice) }} fois celle
+              des records de froid{% endif %}
+          {%- endif %}.
+        {% endif %}
+      </p>
+      <p class="assise">
+        Pour chacun des 366 jours du calendrier, une seule année détient le record. Sous
+        un climat stable, chaque année a exactement la même chance de le détenir : une
+        décennie devrait donc en détenir une part proportionnelle aux années qu'elle
+        apporte. C'est cette part qui vaut <strong>1,00</strong> ici. La bande grise est
+        ce que le hasard seul produit, à {{ ecarts_types_bruit | int }} écarts-types.
+      </p>
+
+      <div class="viz records" data-records>
+        <div class="viz-cadre">
+          <p class="viz-vide">
+            Le graphe demande JavaScript. Les indices restent lisibles dans le tableau
+            ci-dessous.
+          </p>
+        </div>
+        <div class="viz-bulle" role="status" aria-live="polite" data-visible="false"></div>
+        <ul class="viz-legende"></ul>
+
+        <details class="viz-tableau">
+          <summary>Voir les indices</summary>
+          <div class="defilable">
+            <table>
+              <thead>
+                <tr>
+                  <th>Décennie</th><th>Années</th>
+                  <th>Records chaud</th><th>Indice</th>
+                  <th>Records froid</th><th>Indice</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for d in donnees_records.decennies | reverse %}
+                  <tr>
+                    <td>{{ d.decennie }}s</td>
+                    <td>{{ d.annees }}</td>
+                    <td>{{ d.chaleur.records if d.chaleur else "—" }}</td>
+                    <td>{{ "%.2f" | format(d.chaleur.indice) if d.chaleur else "—" }}</td>
+                    <td>{{ d.froid.records if d.froid else "—" }}</td>
+                    <td>{{ "%.2f" | format(d.froid.indice) if d.froid else "—" }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <script type="application/json" id="records-donnees">{{ donnees_records | tojson }}</script>
+      </div>
+
+      <p class="assise mention">
+        Le bruit suppose les jours du calendrier indépendants. Ils ne le sont pas tout à
+        fait — deux jours voisins se ressemblent — de sorte que la vraie bande est un peu
+        plus large que celle affichée. Un indice qui dépasse la bande d'un facteur deux
+        reste hors d'atteinte du hasard.
+      </p>
+    </div>
+  </section>
+  {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/climat.js" defer></script>
+{% endblock %}

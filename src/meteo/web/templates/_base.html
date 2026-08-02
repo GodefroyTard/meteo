@@ -43,6 +43,11 @@
       <svg class="icone" aria-hidden="true"><use href="#i-cible"></use></svg>
       Fiabilité des modèles
     </a>
+    <a href="/climat{{ lien_lieu }}"
+       {% if page == "climat" %}aria-current="page"{% endif %}>
+      <svg class="icone" aria-hidden="true"><use href="#i-tendance"></use></svg>
+      Climat
+    </a>
   </nav>
 
   <section class="bloc">
@@ -170,7 +175,11 @@
 // balayage porte sur data-valide-au-changement et non sur un formulaire nommé :
 // une page qui ajoute un formulaire de réglages hérite du comportement au lieu de
 // l'oublier. Le bouton de secours reste en place pour les navigateurs sans script.
-document.querySelectorAll('form[data-valide-au-changement] select').forEach(function (champ) {
+// Les champs de date suivent la même règle que les listes : la page climat se règle
+// sur un jour de l'année, et attendre une validation manuelle y serait aussi
+// déroutant qu'ailleurs.
+var REGLAGES = 'form[data-valide-au-changement] select, form[data-valide-au-changement] input[type="date"]';
+document.querySelectorAll(REGLAGES).forEach(function (champ) {
   champ.addEventListener('change', function () { champ.form.submit(); });
 });
 

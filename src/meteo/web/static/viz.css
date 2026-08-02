@@ -171,3 +171,222 @@
   .viz-serie { stroke: CanvasText; }
   .viz-legende button[aria-pressed="false"] { opacity: 1; }
 }
+
+/* ---------------------------------------------------------------------------
+   Graphe climat : le nuage des années, la droite ajustée, son incertitude.
+
+   Deux séries seulement, et ce ne sont pas deux identités interchangeables mais
+   deux grandeurs physiques : le maximum du jour et le minimum de la nuit. On
+   reprend donc la paire chaud/froid des cartes de conditions (ADR 0007) plutôt
+   que la palette catégorielle des modèles, qui ferait lire « série 1, série 2 »
+   là où il faut lire « le jour, la nuit ».
+
+   Paire vérifiée pour le daltonisme : ΔE protanope 19,3 en clair, 20,4 en sombre,
+   très au-dessus du plancher de 8. Le mode sombre a ses propres valeurs, plus
+   sombres et non plus claires : c'est la bande de luminosité utilisable sur fond
+   noir qui l'impose. */
+.viz.climat {
+  --maxi: #bd512c;
+  --mini: #2f6cad;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz.climat {
+    --maxi: #d97648;
+    --mini: #5695d8;
+  }
+}
+:root[data-theme="dark"] .viz.climat {
+  --maxi: #d97648;
+  --mini: #5695d8;
+}
+
+.climat-point { fill: var(--teinte); opacity: .5; }
+.climat-point.maxi { --teinte: var(--maxi); }
+.climat-point.mini { --teinte: var(--mini); }
+
+.climat-droite {
+  fill: none;
+  stroke: var(--teinte);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+.climat-droite.maxi { --teinte: var(--maxi); }
+.climat-droite.mini { --teinte: var(--mini); }
+
+/* Le prolongement se distingue par la forme et non par la couleur seule : un
+   lecteur qui ne perçoit pas la teinte doit voir qu'on a quitté le mesuré. */
+.climat-droite.prolongee { stroke-dasharray: 7 5; opacity: .85; }
+
+.climat-bande { fill: var(--teinte); opacity: .13; stroke: none; }
+.climat-bande.maxi { --teinte: var(--maxi); }
+.climat-bande.mini { --teinte: var(--mini); }
+
+.climat-frontiere { stroke: var(--viz-axe); stroke-width: 1; stroke-dasharray: 3 3; }
+.climat-frontiere-texte { fill: var(--viz-muted); font-size: 11px; }
+
+.climat-curseur { stroke: var(--viz-axe); stroke-width: 1; }
+.climat-halo { fill: none; stroke: var(--viz-surface); stroke-width: 2.5; }
+
+.viz-legende .cle.maxi { background: var(--maxi); }
+.viz-legende .cle.mini { background: var(--mini); }
+
+.viz .mention { font-size: .82rem; color: var(--viz-muted); }
+
+/* ---------------------------------------------------------------------------
+   Cycle annuel : une courbe par année, du 1er janvier au 31 décembre.
+
+   Ici la couleur encode le *temps*, une grandeur ordonnée — donc une rampe
+   séquentielle d'une seule teinte, et non la palette catégorielle. La teinte
+   est celle de l'accent de l'interface, délibérément non thermique : reprendre
+   le chaud du graphe précédent ferait croire que la couleur dit la température,
+   alors que c'est la hauteur de la courbe qui la dit.
+
+   Rampes vérifiées en mode ordinal : luminosité monotone, écarts de paliers
+   visibles, extrémité pâle à 2,87:1 sur fond clair et 2,90:1 sur fond sombre.
+
+   Les paliers intermédiaires ne sont pas énumérés : color-mix interpole entre
+   les deux bornes selon --age, que le script pose sur chaque courbe. Les
+   couleurs restent ainsi en CSS, seule la position vient de la donnée. */
+.viz.cycle {
+  --cycle-ancien: #a08ccc;
+  --cycle-recent: #412876;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz.cycle {
+    --cycle-ancien: #6b57a0;
+    --cycle-recent: #cdc6f8;
+  }
+}
+:root[data-theme="dark"] .viz.cycle {
+  --cycle-ancien: #6b57a0;
+  --cycle-recent: #cdc6f8;
+}
+
+/* Le fond du graphe : toutes les années, presque effacées. Elles ne sont pas
+   décoratives — c'est leur épaisseur collective qui montre l'étendue de ce
+   qu'une année peut faire, et sans elles les décennies sembleraient régulières. */
+.cycle-annee {
+  fill: none;
+  stroke: var(--viz-ink);
+  stroke-width: 1;
+  opacity: .07;
+}
+
+/* Sur fond sombre le nuage est clair, donc plus lumineux que le bas de la rampe :
+   sans cette atténuation, les décennies anciennes passeraient derrière le bruit
+   qu'elles sont censées surplomber. */
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .cycle-annee { opacity: .045; }
+}
+:root[data-theme="dark"] .cycle-annee { opacity: .045; }
+
+.cycle-repere {
+  fill: none;
+  stroke: color-mix(in oklab, var(--cycle-recent) calc(var(--age) * 100%), var(--cycle-ancien));
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+/* L'année en cours se distingue par l'épaisseur autant que par la teinte : elle
+   reste repérable pour qui ne perçoit pas la nuance du haut de la rampe. */
+.cycle-repere.courante { stroke-width: 3.4; }
+
+.cycle-etiquette {
+  fill: var(--viz-ink);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.cycle-jour-choisi { stroke: var(--viz-axe); stroke-width: 1; stroke-dasharray: 3 3; }
+.cycle-jour-texte { fill: var(--viz-muted); font-size: 11px; }
+
+/* Vaut pour la légende comme pour la bulle de survol : les deux vivent sous
+   .viz.cycle et doivent porter la même teinte que la courbe qu'elles désignent. */
+.viz.cycle .cle.decennie {
+  background: color-mix(in oklab, var(--cycle-recent) calc(var(--age) * 100%), var(--cycle-ancien));
+}
+
+/* ---------------------------------------------------------------------------
+   Franchissements de seuils : trois comptages sur un axe commun.
+
+   Un seul axe parce qu'une seule unité — des jours par an. Jamais deux échelles
+   sur un même graphe : c'est la façon la plus sûre de faire dire n'importe quoi
+   à deux courbes.
+
+   Trois teintes ordonnées du froid au très chaud, vérifiées toutes paires
+   confondues : ΔE deutéranope 11,8 en clair, 11,6 en sombre, très au-dessus du
+   plancher de 8. Le magenta pour la forte chaleur plutôt qu'un second orange :
+   deux teintes chaudes ne tiennent pas à distance suffisante dans la bande de
+   luminosité utilisable sur fond noir. */
+.viz.seuils {
+  --gel: #2f6cad;
+  --ete: #c9761c;
+  --chaleur: #a8296b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz.seuils {
+    --gel: #5695d8;
+    --ete: #b87b2a;
+    --chaleur: #c9497f;
+  }
+}
+:root[data-theme="dark"] .viz.seuils {
+  --gel: #5695d8;
+  --ete: #b87b2a;
+  --chaleur: #c9497f;
+}
+
+.seuil-serie { fill: none; stroke: var(--teinte); stroke-width: 1.4; opacity: .5; }
+.seuil-droite { fill: none; stroke: var(--teinte); stroke-width: 2.6; stroke-linecap: round; }
+.seuil-point { fill: var(--teinte); }
+.seuil-serie.gel, .seuil-droite.gel, .seuil-point.gel { --teinte: var(--gel); }
+.seuil-serie.ete, .seuil-droite.ete, .seuil-point.ete { --teinte: var(--ete); }
+.seuil-serie.chaleur, .seuil-droite.chaleur, .seuil-point.chaleur { --teinte: var(--chaleur); }
+
+.viz.seuils .cle.gel { background: var(--gel); }
+.viz.seuils .cle.ete { background: var(--ete); }
+.viz.seuils .cle.chaleur { background: var(--chaleur); }
+
+/* ---------------------------------------------------------------------------
+   Saison sans gel : une ligne par année, les périodes de gel possible aux deux
+   bouts. C'est le chenal libre au milieu qui porte le message, donc c'est le
+   gel qu'on peint — le vide se lit tout seul. */
+.viz.gel { --gelee: #2f6cad; }
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz.gel { --gelee: #5695d8; }
+}
+:root[data-theme="dark"] .viz.gel { --gelee: #5695d8; }
+
+.gel-segment { fill: var(--gelee); opacity: .55; }
+.gel-decennie { stroke: var(--viz-grille); stroke-width: 1; }
+.gel-annee-texte { fill: var(--viz-muted); font-size: 10px; }
+
+/* ---------------------------------------------------------------------------
+   Records : deux séries appariées par décennie, rapportées à 1,00.
+
+   La paire chaud/froid est celle du premier graphe — même sens, même teintes,
+   pour qu'un lecteur qui a parcouru la page n'ait pas à réapprendre. */
+.viz.records { --chaud: #bd512c; --froid: #2f6cad; }
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz.records {
+    --chaud: #d97648;
+    --froid: #5695d8;
+  }
+}
+:root[data-theme="dark"] .viz.records { --chaud: #d97648; --froid: #5695d8; }
+
+.record-barre.chaleur { fill: var(--chaud); }
+.record-barre.froid { fill: var(--froid); }
+.records-bruit { fill: var(--viz-ink); opacity: .06; }
+.records-reference { stroke: var(--viz-axe); stroke-width: 1.4; }
+.records-reference-texte { fill: var(--viz-muted); font-size: 11px; }
+
+.viz.records .cle.chaleur { background: var(--chaud); }
+.viz.records .cle.froid { background: var(--froid); }

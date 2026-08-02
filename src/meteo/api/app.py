@@ -3,7 +3,7 @@
 L'API ne calcule rien : elle lit des Verdicts déjà matérialisés par le lot (ADR 0004).
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
@@ -15,13 +15,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from meteo.api import lecture
+from meteo.collecte.climatologie import ATTRIBUTION as ATTRIBUTION_CLIMAT
 from meteo.collecte.open_meteo import (
     FUSEAU,
     altitude_du_point,
     previsions_courantes,
     qualite_air,
 )
-from meteo.domaine import conditions
+from meteo.domaine import conditions, cycle, indicateurs, tendance
 from meteo.domaine.modeles import ANTICIPATION_MAX, CATALOGUE, PAR_CLE
 from meteo.domaine.saison import Saison, saison_de
 from meteo.domaine.temps import INCONNU, temps_de
@@ -40,6 +41,10 @@ app = FastAPI(
 _WEB = Path(__file__).parent.parent / "web"
 gabarits = Jinja2Templates(directory=str(_WEB / "templates"))
 app.mount("/static", StaticFiles(directory=str(_WEB / "static")), name="static")
+
+# Les quantièmes sont partout en base et nulle part lisibles : le filtre les rend
+# en clair sans obliger chaque gabarit à refaire la conversion.
+gabarits.env.filters["quantieme"] = lambda rang: _date_du_quantieme(rang)
 
 VARIABLES = (TEMPERATURE, PLUIE)
 
@@ -530,6 +535,40 @@ def _desaccord(cartes: list[dict]) -> dict | None:
 
 _NOMS_JOURS = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
 
+_NOMS_MOIS = (
+    "janvier",
+    "février",
+    "mars",
+    "avril",
+    "mai",
+    "juin",
+    "juillet",
+    "août",
+    "septembre",
+    "octobre",
+    "novembre",
+    "décembre",
+)
+
+
+def _date_du_quantieme(rang: int) -> str:
+    """« 102 » devient « 12 avril ».
+
+    Calé sur une année non bissextile, comme l'axe des cycles : un quantième ne désigne
+    une date que si l'on dit laquelle des deux années on prend pour référence.
+    """
+    return _libelle_date_annuelle(date(2001, 1, 1) + timedelta(days=rang - 1))
+
+
+def _libelle_date_annuelle(jour: date) -> str:
+    """« 2 août » : la date sans son année, puisque c'est la date qui est le sujet.
+
+    Distinct de _libelle_jour, qui situe une journée par rapport à aujourd'hui. Ici
+    l'année n'a pas de sens — c'est justement toutes les années qu'on regarde.
+    """
+    quantieme = "1er" if jour.day == 1 else str(jour.day)
+    return f"{quantieme} {_NOMS_MOIS[jour.month - 1]}"
+
 
 def _libelle_jour(jour: date) -> str:
     """Le nom d'une journée, relatif tant qu'il porte : aujourd'hui, demain, puis le jour."""
@@ -739,5 +778,287 @@ def fiabilite(
             "donnees": _serialiser(v),
             # Le rang du Modèle dans le catalogue, qui lui attribue sa teinte (ADR 0006).
             "teintes": {m.cle: i + 1 for i, m in enumerate(CATALOGUE)},
+        },
+    )
+
+
+def _jour_demande(brut: str | None) -> date:
+    """La date dont on veut l'histoire. Seuls le mois et le quantième comptent.
+
+    L'année transportée par le formulaire est ignorée : la question est « le 2 août »,
+    pas « le 2 août 2026 ». On la conserve néanmoins dans la valeur du champ, sans quoi
+    un `input type="date"` refuserait de s'afficher.
+    """
+    if brut:
+        try:
+            return date.fromisoformat(brut)
+        except ValueError:
+            pass
+    return date.today()
+
+
+def _serie_tendance(t, debut: int, fin: int, decimales: int = 2) -> dict | None:
+    """La droite et sa bande d'incertitude, année par année, prêtes à tracer.
+
+    Calculées ici et non dans le navigateur : la formule de l'incertitude est le cœur
+    de ce que la page affirme, elle n'a rien à faire dans une feuille de script où
+    personne ne viendra la relire.
+    """
+    if t is None:
+        return None
+    return {
+        # Deux décimales, la même précision que le gabarit : arrondir ici à trois puis
+        # laisser le navigateur réarrondir à deux ferait afficher +0,31 dans la phrase
+        # et +0,32 dans la légende, pour la même pente.
+        "pente_par_decennie": round(t.pente_par_decennie, decimales),
+        "incertitude_par_decennie": round(t.incertitude_par_decennie, decimales),
+        "r2": round(t.r2, 3),
+        "significative": t.significative,
+        "nb_annees": t.nb_annees,
+        "premiere_annee": t.premiere_annee,
+        "derniere_annee": t.derniere_annee,
+        "evolution_totale": round(t.evolution_totale, decimales),
+        "courbe": [
+            {
+                "annee": annee,
+                "valeur": round(t.valeur(annee), 2),
+                "bas": round(t.valeur(annee) - t.incertitude(annee), 2),
+                "haut": round(t.valeur(annee) + t.incertitude(annee), 2),
+            }
+            for annee in range(debut, fin + 1)
+        ],
+    }
+
+
+def _serie_franchissements(series) -> dict | None:
+    """Les décomptes annuels des trois seuils, sur un axe commun.
+
+    La droite s'arrête à la dernière année mesurée, sans prolongement. Prolonger un
+    comptage n'aurait pas de sens : une droite descendante finirait par annoncer un
+    nombre de jours de gel négatif, ce qui n'existe pas.
+    """
+    seuils = []
+    for s in series:
+        if not s.annees:
+            continue
+        seuils.append(
+            {
+                "cle": s.seuil.cle,
+                "nom": s.seuil.nom,
+                "definition": s.seuil.definition,
+                "points": [{"annee": a.annee, "jours": a.jours} for a in s.annees],
+                "tendance": _serie_tendance(
+                    s.tendance, s.annees[0].annee, s.annees[-1].annee, decimales=1
+                ),
+            }
+        )
+    return {"seuils": seuils} if seuils else None
+
+
+def _serie_gel(gel) -> dict | None:
+    """Les saisons sans gel, bornées par leurs deux dates."""
+    if not gel.saisons:
+        return None
+    return {
+        "saisons": [
+            {
+                "annee": s.annee,
+                "dernier_gel": s.dernier_gel,
+                "premier_gel": s.premier_gel,
+                "duree": s.duree,
+            }
+            for s in gel.saisons
+        ],
+        "debuts_de_mois": list(cycle.DEBUTS_DE_MOIS),
+        "jours_an": cycle.JOURS_AN,
+        "tendance": _serie_tendance(
+            gel.tendance, gel.saisons[0].annee, gel.saisons[-1].annee, decimales=1
+        ),
+    }
+
+
+def _serie_records(records) -> dict | None:
+    """Les parts de records par décennie, chaud et froid appariés.
+
+    Les deux séries partagent l'axe : c'est leur divergence qui porte le message, et la
+    lire demande de les voir côte à côte plutôt que sur deux graphiques.
+    """
+    if not records.chaleur and not records.froid:
+        return None
+    par_decennie = {p.decennie: {"chaleur": p} for p in records.chaleur}
+    for p in records.froid:
+        par_decennie.setdefault(p.decennie, {})["froid"] = p
+
+    def part(p):
+        if p is None:
+            return None
+        return {
+            "records": p.records,
+            "attendus": round(p.attendus, 1),
+            "indice": round(p.indice, 2),
+            "bruit": round(p.bruit, 2),
+            "remarquable": p.remarquable,
+        }
+
+    return {
+        "decennies": [
+            {
+                "decennie": d,
+                "annees": max(
+                    (v.annees for v in par_decennie[d].values()), default=0
+                ),
+                "chaleur": part(par_decennie[d].get("chaleur")),
+                "froid": part(par_decennie[d].get("froid")),
+            }
+            for d in sorted(par_decennie)
+        ],
+        "dernier_chaud": records.dernier_chaud,
+        "dernier_froid": records.dernier_froid,
+    }
+
+
+def _serie_climat(serie: lecture.SerieJour) -> dict:
+    """La Série longue d'un jour, sérialisée pour le graphique."""
+    fin = tendance.HORIZON_PROJECTION
+    mesurees = [a.annee for a in serie.maxima] + [a.annee for a in serie.minima]
+    debut = min(mesurees) if mesurees else serie.poste.premiere_annee
+
+    def points(agregees):
+        return [
+            {"annee": a.annee, "valeur": round(a.valeur, 2), "jours": a.nb_jours}
+            for a in agregees
+        ]
+
+    return {
+        "derniere_annee_mesuree": max(mesurees) if mesurees else None,
+        "horizon": fin,
+        "series": [
+            {
+                "cle": "maxi",
+                "nom": "Maximales",
+                "points": points(serie.maxima),
+                "tendance": _serie_tendance(serie.tendance_max, debut, fin),
+            },
+            {
+                "cle": "mini",
+                "nom": "Minimales",
+                "points": points(serie.minima),
+                "tendance": _serie_tendance(serie.tendance_min, debut, fin),
+            },
+        ],
+    }
+
+
+def _serie_cycle(sc: lecture.SerieCycle, jour: date) -> dict | None:
+    """Toutes les années d'un Poste, prêtes à superposer.
+
+    Les courbes de fond partent aussi : c'est leur épaisseur collective qui donne son
+    sens aux décennies mises en avant. Après lissage et sous-échantillonnage, un Poste
+    centenaire tient dans quelques dizaines de milliers de nombres.
+    """
+    if not sc.annees:
+        return None
+    return {
+        "annees": [
+            {
+                "annee": a.annee,
+                "quantiemes": list(a.quantiemes),
+                "valeurs": [round(v, 1) for v in a.valeurs_c],
+                "complete": a.complete,
+            }
+            for a in sc.annees
+        ],
+        "decennies": list(sc.decennies),
+        "debuts_de_mois": list(cycle.DEBUTS_DE_MOIS),
+        "jours_an": cycle.JOURS_AN,
+        "pas_j": cycle.PAS_TRACE_J,
+        # Reporté du premier graphe : les deux parlent du même moment.
+        "quantieme_choisi": cycle.quantieme(jour),
+    }
+
+
+def _mensuelles(sc: lecture.SerieCycle) -> list[dict]:
+    """Les moyennes mensuelles des décennies mises en avant, pour le tableau."""
+    par_annee = {a.annee: a for a in sc.annees}
+    return [
+        {"annee": annee, "valeurs": cycle.moyennes_mensuelles(par_annee[annee])}
+        for annee in sc.decennies
+        if annee in par_annee
+    ]
+
+
+@app.get("/api/climat")
+def api_climat(poste: str, jour: str | None = None) -> dict:
+    """La Série longue d'un Poste sur un jour de l'année."""
+    cible = _jour_demande(jour)
+    serie = lecture.serie_jour(poste, cible.month, cible.day)
+    if serie is None:
+        raise HTTPException(status_code=404, detail="Poste inconnu.")
+    return _serie_climat(serie)
+
+
+@app.get("/climat", response_class=HTMLResponse)
+def climat(
+    request: Request,
+    station: str | None = None,
+    lat: float | None = Query(None, ge=-90, le=90),
+    lon: float | None = Query(None, ge=-180, le=180),
+    poste: str | None = None,
+    jour: str | None = None,
+) -> HTMLResponse:
+    """La mémoire du lieu : ce qu'un jour de l'année pesait, année après année."""
+    lieu = _lieu(station, lat, lon)
+    toutes, choisie, _, _ = lieu
+    point = _point(toutes, choisie, lat, lon)
+
+    postes = lecture.postes_utilisables()
+    rattache = lecture.rattachement_climatique(*point) if point else None
+    # Un Poste choisi à la main l'emporte sur le rattachement, et se transporte d'une
+    # date à l'autre. Sans choix explicite, changer de lieu doit changer de Poste.
+    retenu = poste or (rattache.reference.code if rattache and rattache.reference else None)
+    if retenu is None and postes:
+        retenu = postes[0].numero
+
+    cible = _jour_demande(jour)
+    # Une seule lecture de la Série longue nourrit les cinq graphes de la page.
+    dossier = lecture.dossier(retenu, cible.month, cible.day) if retenu else None
+    serie = dossier.jour if dossier else None
+    annuel = dossier.cycle if dossier else None
+    reglages = {"jour": cible.isoformat()}
+    if poste:
+        reglages["poste"] = poste
+
+    return gabarits.TemplateResponse(
+        request=request,
+        name="climat.html",
+        context={
+            **_menu("climat", "/climat", lieu, (lat, lon) if point and lat else None, reglages),
+            "postes": postes,
+            "poste_retenu": retenu,
+            "rattachement_climat": rattache,
+            "point": point,
+            "jour": cible,
+            "libelle_jour": _libelle_date_annuelle(cible),
+            "serie": serie,
+            "donnees": _serie_climat(serie) if serie else None,
+            "cycle": annuel,
+            "donnees_cycle": _serie_cycle(annuel, cible) if annuel else None,
+            "mensuelles": _mensuelles(annuel) if annuel else [],
+            "noms_mois": [m[:3] for m in _NOMS_MOIS],
+            "lissage_j": cycle.DEMI_LISSAGE_J * 2 + 1,
+            "franchissements": dossier.franchissements if dossier else (),
+            "donnees_seuils": _serie_franchissements(dossier.franchissements)
+            if dossier
+            else None,
+            "gel": dossier.gel if dossier else None,
+            "donnees_gel": _serie_gel(dossier.gel) if dossier else None,
+            "records": dossier.records if dossier else None,
+            "donnees_records": _serie_records(dossier.records) if dossier else None,
+            "ecarts_types_bruit": indicateurs.ECARTS_TYPES_BRUIT,
+            "annees_minimum": tendance.ANNEES_MINIMUM,
+            "annee_pleine_j": tendance.JOURS_ANNEE_PLEINE,
+            "fenetre_j": tendance.FENETRE_J,
+            "horizon": tendance.HORIZON_PROJECTION,
+            "attribution": ATTRIBUTION_CLIMAT,
         },
     )
