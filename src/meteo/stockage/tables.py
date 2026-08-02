@@ -141,6 +141,7 @@ class Poste(Base):
 
     annees_pluie: Mapped[int] = mapped_column(SmallInteger, default=0)
     annees_etp: Mapped[int] = mapped_column(SmallInteger, default=0)
+    annees_neige: Mapped[int] = mapped_column(SmallInteger, default=0)
     """Couvertures distinctes de celle des températures : beaucoup de Postes sont
     purement pluviométriques, et l'évapotranspiration n'existe que sur une minorité."""
 
@@ -175,3 +176,8 @@ class Journee(Base):
     rr_mm: Mapped[float | None] = mapped_column(REAL)
     etp_monteith_mm: Mapped[float | None] = mapped_column(REAL)
     etp_grille_mm: Mapped[float | None] = mapped_column(REAL)
+    neige_cm: Mapped[float | None] = mapped_column(REAL)
+    """Hauteur maximale de neige au sol dans la journée. Mesurée toute l'année et non
+    seulement l'hiver : un zéro de juillet est une mesure, pas une absence."""
+
+    neige_fraiche_cm: Mapped[float | None] = mapped_column(REAL)

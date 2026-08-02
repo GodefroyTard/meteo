@@ -48,7 +48,15 @@ def _ligne_poste(j: JourneeMesuree) -> dict:
     }
 
 
-MESURES = ("tn_c", "tx_c", "rr_mm", "etp_monteith_mm", "etp_grille_mm")
+MESURES = (
+    "tn_c",
+    "tx_c",
+    "rr_mm",
+    "etp_monteith_mm",
+    "etp_grille_mm",
+    "neige_cm",
+    "neige_fraiche_cm",
+)
 
 
 def _ligne_journee(j: JourneeMesuree) -> dict:
@@ -112,7 +120,8 @@ def _charger_departement(client: ClientClimatologie, departement: str) -> tuple[
     """
     total, connus = _charger_flux(client.journees(departement), ("tn_c", "tx_c", "rr_mm"))
     autres, aussi = _charger_flux(
-        client.evapotranspirations(departement), ("etp_monteith_mm", "etp_grille_mm")
+        client.evapotranspirations(departement),
+        ("etp_monteith_mm", "etp_grille_mm", "neige_cm", "neige_fraiche_cm"),
     )
     return total + autres, len(connus | aussi)
 
@@ -139,6 +148,7 @@ def _recalculer_couverture() -> int:
             compte(Journee.rr_mm.is_not(None)).label("pluie"),
             compte(Journee.etp_monteith_mm.is_not(None)).label("monteith"),
             compte(Journee.etp_grille_mm.is_not(None)).label("grille"),
+            compte(Journee.neige_cm.is_not(None)).label("neige"),
         )
         .group_by(Journee.poste_numero, annee)
         .subquery()
@@ -151,11 +161,11 @@ def _recalculer_couverture() -> int:
             etat = par_poste.setdefault(
                 ligne.poste_numero,
                 {"premiere": ligne.annee, "derniere": ligne.annee,
-                 "temp": 0, "pluie": 0, "monteith": 0, "grille": 0},
+                 "temp": 0, "pluie": 0, "monteith": 0, "grille": 0, "neige": 0},
             )
             etat["premiere"] = min(etat["premiere"], ligne.annee)
             etat["derniere"] = max(etat["derniere"], ligne.annee)
-            for cle in ("temp", "pluie", "monteith", "grille"):
+            for cle in ("temp", "pluie", "monteith", "grille", "neige"):
                 if getattr(ligne, cle) >= JOURS_ANNEE_PLEINE:
                     etat[cle] += 1
 
@@ -177,6 +187,7 @@ def _recalculer_couverture() -> int:
                     annees_pleines=etat["temp"],
                     annees_pluie=etat["pluie"],
                     annees_etp=annees_etp,
+                    annees_neige=etat["neige"],
                     source_etp=source,
                 )
             )

@@ -11,7 +11,10 @@ from meteo.collecte.climatologie import (
 )
 
 ENTETE_T = "NUM_POSTE;NOM_USUEL;LAT;LON;ALTI;AAAAMMJJ;RR;QRR;TN;QTN;TX;QTX"
-ENTETE_A = "NUM_POSTE;NOM_USUEL;LAT;LON;ALTI;AAAAMMJJ;ETPMON;QETPMON;ETPGRILLE;QETPGRILLE"
+ENTETE_A = (
+    "NUM_POSTE;NOM_USUEL;LAT;LON;ALTI;AAAAMMJJ;ETPMON;QETPMON;ETPGRILLE;QETPGRILLE"
+    ";NEIGETOTX;QNEIGETOTX;HNEIGEF;QHNEIGEF"
+)
 
 
 def _fichier(entete: str, *lignes: str) -> io.StringIO:
@@ -77,15 +80,29 @@ class TestEvapotranspiration:
     def test_les_deux_sources_cohabitent(self):
         # Elles ne valent pas la même chose : Monteith vient des mesures du poste,
         # la grille d'une analyse. On les stocke séparément (ADR 0009).
-        (j,) = _autres("38384001;GRENOBLE-ST GEOIRS;45.36;5.33;376;20030802;6.8;1;5.9;9")
+        (j,) = _autres("38384001;GRENOBLE-ST GEOIRS;45.36;5.33;376;20030802;6.8;1;5.9;9;;;;")
         assert j.etp_monteith_mm == 6.8
         assert j.etp_grille_mm == 5.9
         assert j.tn_c is None and j.rr_mm is None
 
     def test_la_grille_seule_suffit_a_retenir_la_journee(self):
-        (j,) = _autres("38548001;VILLARD-DE-LANS;45.07;5.55;1027;20030802;;;4.7;9")
+        (j,) = _autres("38548001;VILLARD-DE-LANS;45.07;5.55;1027;20030802;;;4.7;9;;;;")
         assert j.etp_monteith_mm is None
         assert j.etp_grille_mm == 4.7
+
+
+class TestNeige:
+    def test_la_hauteur_au_sol_et_la_neige_fraiche(self):
+        (j,) = _autres("38170001;GRANDE-CHARTREUSE;45.36;5.79;945;19630115;;;;;62;1;14;1")
+        assert j.neige_cm == 62.0
+        assert j.neige_fraiche_cm == 14.0
+
+    def test_un_zero_de_juillet_est_une_mesure_et_non_une_absence(self):
+        # La hauteur est relevée toute l'année : sans cela, une saison paraîtrait
+        # lacunaire six mois sur douze et serait écartée.
+        (j,) = _autres("38170001;GRANDE-CHARTREUSE;45.36;5.79;945;19630715;;;;;0;1;;")
+        assert j.neige_cm == 0.0
+        assert not j.vide
 
 
 class TestFormat:

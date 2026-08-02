@@ -5,7 +5,8 @@ fichiers complémentaires :
 
 - **RR-T-Vent** porte les minima, les maxima et la pluie. C'est le socle : il remonte à
   1950, et bien avant pour les Postes anciens ;
-- **autres-parametres** porte l'évapotranspiration potentielle, sous deux formes.
+- **autres-parametres** porte l'évapotranspiration potentielle et la neige au sol.
+  L'évapotranspiration y vient sous deux formes.
   `ETPMON` est calculée par Penman-Monteith depuis les mesures du Poste ; `ETPGRILLE`
   est interpolée sur une grille. La première est rare — cinq Postes en Isère — la
   seconde couvre quarante-six Postes. Elles ne valent pas la même chose et sont donc
@@ -60,11 +61,13 @@ COLONNES = {
     "RR": "rr_mm",
     "ETPMON": "etp_monteith_mm",
     "ETPGRILLE": "etp_grille_mm",
+    "NEIGETOTX": "neige_cm",
+    "HNEIGEF": "neige_fraiche_cm",
 }
 """Colonne du fichier → champ de la Journée mesurée."""
 
 MESURES_TEMPERATURES = ("TN", "TX", "RR")
-MESURES_AUTRES = ("ETPMON", "ETPGRILLE")
+MESURES_AUTRES = ("ETPMON", "ETPGRILLE", "NEIGETOTX", "HNEIGEF")
 
 CHAMPS_IDENTITE = ("NUM_POSTE", "NOM_USUEL", "LAT", "LON", "ALTI", "AAAAMMJJ")
 
@@ -96,6 +99,8 @@ class JourneeMesuree:
     rr_mm: float | None = None
     etp_monteith_mm: float | None = None
     etp_grille_mm: float | None = None
+    neige_cm: float | None = None
+    neige_fraiche_cm: float | None = None
 
     @property
     def vide(self) -> bool:
