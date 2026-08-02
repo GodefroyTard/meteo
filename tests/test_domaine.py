@@ -1,9 +1,9 @@
-from datetime import date
+from datetime import date, timedelta
 
 import numpy as np
 import pytest
 
-from meteo.domaine import qualite
+from meteo.domaine import cycle, indicateurs, qualite, tendance
 from meteo.domaine.conditions import (
     CRANS_AIR,
     CRANS_UV,
@@ -406,3 +406,313 @@ class TestTonTemperature:
 
     def test_sans_temperature_il_n_y_a_pas_de_ton(self):
         assert ton_temperature(None) is None
+
+
+# --- Séries longues : la tendance d'un jour de l'année, et son refus de conclure.
+
+
+def _serie_reguliere(debut, fin, valeur):
+    """Un dictionnaire jour → valeur couvrant entièrement une plage d'années."""
+    valeurs = {}
+    for annee in range(debut, fin + 1):
+        jour = date(annee, 1, 1)
+        while jour.year == annee:
+            valeurs[jour] = valeur(annee)
+            jour += timedelta(days=1)
+    return valeurs
+
+
+class TestFenetre:
+    def test_quinze_jours_centres(self):
+        f = tendance.fenetre(2000, 8, 2)
+        assert len(f) == 15
+        assert f[0] == date(2000, 7, 26)
+        assert f[7] == date(2000, 8, 2)
+        assert f[-1] == date(2000, 8, 9)
+
+    def test_debut_janvier_emprunte_a_decembre_precedent(self):
+        f = tendance.fenetre(2000, 1, 3)
+        assert f[0] == date(1999, 12, 27)
+        assert f[-1] == date(2000, 1, 10)
+
+    def test_le_29_fevrier_se_replie_sur_le_28(self):
+        # Sans ce repli, la série n'aurait de point qu'une année sur quatre.
+        assert tendance.fenetre(2001, 2, 29)[7] == date(2001, 2, 28)
+        assert tendance.fenetre(2000, 2, 29)[7] == date(2000, 2, 29)
+
+
+class TestAgregation:
+    def test_une_annee_par_annee_couverte(self):
+        valeurs = _serie_reguliere(1990, 1995, lambda a: 20.0)
+        points = tendance.agreger(valeurs, 8, 2, range(1990, 1996))
+        assert [p.annee for p in points] == [1990, 1991, 1992, 1993, 1994, 1995]
+        assert all(p.nb_jours == 15 for p in points)
+        assert points[0].valeur == 20.0
+
+    def test_les_jours_de_decembre_comptent_pour_l_annee_visee(self):
+        # Fenêtre du 3 janvier 1991 : du 27 au 31 décembre 1990, puis du 1er au
+        # 10 janvier 1991 — cinq jours empruntés à l'année civile précédente, dix
+        # de l'année visée, et le tout compte pour 1991.
+        valeurs = _serie_reguliere(1990, 1991, lambda a: float(a))
+        points = tendance.agreger(valeurs, 1, 3, range(1991, 1992))
+        assert points[0].annee == 1991
+        assert points[0].valeur == pytest.approx((5 * 1990 + 10 * 1991) / 15)
+
+    def test_une_annee_trop_creuse_est_omise_et_non_mise_a_zero(self):
+        valeurs = _serie_reguliere(1990, 1991, lambda a: 20.0)
+        for jour in tendance.fenetre(1991, 8, 2)[:10]:
+            valeurs.pop(jour, None)
+        points = tendance.agreger(valeurs, 8, 2, range(1990, 1992))
+        assert [p.annee for p in points] == [1990]
+
+
+class TestAjustement:
+    def _points(self, debut, fin, valeur):
+        return [
+            tendance.AnneeAgregee(annee=a, valeur=valeur(a), nb_jours=15)
+            for a in range(debut, fin + 1)
+        ]
+
+    def test_refus_sous_trente_annees(self):
+        assert tendance.ajuster(self._points(1990, 2010, lambda a: 20.0)) is None
+
+    def test_retrouve_une_pente_connue(self):
+        # +0,03 °C par an, soit +0,3 °C par décennie, sans bruit.
+        points = self._points(1970, 2020, lambda a: 10.0 + 0.03 * (a - 1970))
+        t = tendance.ajuster(points)
+        assert t.pente_par_decennie == pytest.approx(0.3)
+        assert t.r2 == pytest.approx(1.0)
+        assert t.evolution_totale == pytest.approx(1.5)
+        assert t.significative
+
+    def test_un_bruit_sans_pente_n_est_pas_declare_significatif(self):
+        points = self._points(1970, 2020, lambda a: 10.0 + (1.0 if a % 2 else -1.0))
+        t = tendance.ajuster(points)
+        assert abs(t.pente_par_decennie) < t.incertitude_par_decennie
+        assert not t.significative
+
+    def test_l_incertitude_s_evase_en_s_eloignant_des_annees_mesurees(self):
+        bruite = lambda a: 10.0 + 0.03 * (a - 1970) + (0.5 if a % 3 else -0.5)  # noqa: E731
+        t = tendance.ajuster(self._points(1970, 2020, bruite))
+        assert t.incertitude(t.annee_pivot) < t.incertitude(2020) < t.incertitude(2050)
+
+
+# --- Cycle annuel : toutes les années superposées sur l'axe des quantièmes.
+
+
+class TestQuantieme:
+    def test_le_29_fevrier_n_a_pas_de_rang(self):
+        assert cycle.quantieme(date(2000, 2, 29)) is None
+
+    def test_le_1er_mars_tombe_au_meme_rang_les_annees_bissextiles(self):
+        # Sans ce décalage, une courbe sur quatre serait décalée d'un jour par
+        # rapport aux autres sur les trois quarts de l'année.
+        assert cycle.quantieme(date(2000, 3, 1)) == cycle.quantieme(date(2001, 3, 1)) == 60
+
+    def test_les_bornes_de_l_annee(self):
+        assert cycle.quantieme(date(2001, 1, 1)) == 1
+        assert cycle.quantieme(date(2001, 12, 31)) == 365
+        assert cycle.quantieme(date(2000, 12, 31)) == 365
+
+    def test_avant_fevrier_rien_ne_bouge(self):
+        assert cycle.quantieme(date(2000, 2, 28)) == cycle.quantieme(date(2001, 2, 28)) == 59
+
+
+class TestMoyennesQuotidiennes:
+    def test_la_demi_somme_des_extremes(self):
+        jour = date(2001, 7, 1)
+        assert cycle.moyennes_quotidiennes({jour: 10.0}, {jour: 20.0}) == {jour: 15.0}
+
+    def test_une_journee_a_un_seul_extreme_est_ecartee(self):
+        # Ne garder que le maximum ferait pencher la moyenne du même côté toute l'année.
+        complet, boiteux = date(2001, 7, 1), date(2001, 7, 2)
+        moyennes = cycle.moyennes_quotidiennes(
+            {complet: 10.0, boiteux: 12.0}, {complet: 20.0}
+        )
+        assert moyennes == {complet: 15.0}
+
+
+class TestLissage:
+    def _dix_jours(self):
+        return {date(2001, 1, j): float(j) for j in range(1, 11)}
+
+    def test_moyenne_centree(self):
+        lissees = cycle.lisser(self._dix_jours(), demi_largeur=2, couverture=0.0)
+        assert lissees[date(2001, 1, 5)] == pytest.approx(5.0)
+
+    def test_les_bords_incomplets_sont_ecartes(self):
+        lissees = cycle.lisser(self._dix_jours(), demi_largeur=2, couverture=1.0)
+        assert min(lissees) == date(2001, 1, 3)
+        assert max(lissees) == date(2001, 1, 8)
+
+    def test_la_fenetre_du_1er_janvier_va_chercher_decembre(self):
+        valeurs = {date(2000, 12, 30): 0.0, date(2000, 12, 31): 0.0, date(2001, 1, 1): 3.0}
+        lissees = cycle.lisser(valeurs, demi_largeur=2, couverture=0.0)
+        assert lissees[date(2001, 1, 1)] == pytest.approx(1.0)
+
+    def test_une_lacune_ne_produit_pas_de_point(self):
+        valeurs = {date(2001, 1, 1): 5.0, date(2001, 6, 1): 20.0}
+        assert cycle.lisser(valeurs, demi_largeur=2, couverture=1.0) == {}
+
+
+class TestCycles:
+    def _annee(self, annee, valeur=10.0):
+        jour, valeurs = date(annee, 1, 1), {}
+        while jour.year == annee:
+            valeurs[jour] = valeur
+            jour += timedelta(days=1)
+        return valeurs
+
+    def test_un_point_tous_les_cinq_jours(self):
+        (courbe,) = cycle.cycles(self._annee(2001), pas=5, minimum=3)
+        assert courbe.quantiemes[:4] == (1, 6, 11, 16)
+        assert len(courbe.quantiemes) == 73
+        assert courbe.complete
+
+    def test_une_annee_trop_courte_est_ecartee(self):
+        valeurs = {date(2001, 1, j): 10.0 for j in range(1, 20)}
+        assert cycle.cycles(valeurs, pas=5, minimum=10) == []
+
+    def test_une_annee_partielle_n_est_pas_declaree_complete(self):
+        valeurs = {d: v for d, v in self._annee(2001).items() if d.month <= 6}
+        (courbe,) = cycle.cycles(valeurs, pas=5, minimum=3)
+        assert not courbe.complete
+
+
+class TestMoyennesMensuelles:
+    def test_chaque_mois_recoit_ses_points(self):
+        courbe = cycle.CycleAnnuel(
+            annee=2001, quantiemes=(1, 31, 32, 59, 335), valeurs_c=(0.0, 2.0, 10.0, 10.0, 5.0)
+        )
+        mensuelles = cycle.moyennes_mensuelles(courbe)
+        assert mensuelles[0] == pytest.approx(1.0)   # janvier : quantièmes 1 et 31
+        assert mensuelles[1] == pytest.approx(10.0)  # février : 32 et 59
+        assert mensuelles[11] == pytest.approx(5.0)  # décembre : 335
+        assert mensuelles[5] is None                 # juin : aucun point
+
+
+class TestDecennies:
+    def test_de_dix_en_dix_depuis_la_derniere_annee(self):
+        # L'ancrage est la dernière année et non un multiple rond : la question est
+        # « où en est-on par rapport à il y a dix ans », pas « que valait 1980 ».
+        assert cycle.decennies(2026, 1998) == [2026, 2016, 2006]
+
+    def test_une_seule_annee_disponible(self):
+        assert cycle.decennies(2026, 2026) == [2026]
+
+
+# --- Indicateurs comptés : franchissements, saison sans gel, records.
+
+
+def _annee_de_valeurs(annee, valeur):
+    """Une année civile complète, la même valeur chaque jour."""
+    jour, valeurs = date(annee, 1, 1), {}
+    while jour.year == annee:
+        valeurs[jour] = valeur(jour) if callable(valeur) else valeur
+        jour += timedelta(days=1)
+    return valeurs
+
+
+class TestFranchissements:
+    GEL = indicateurs.PAR_CLE["gel"]
+    CHALEUR = indicateurs.PAR_CLE["chaleur"]
+
+    def test_compte_les_jours_sous_zero(self):
+        valeurs = _annee_de_valeurs(2001, lambda j: -5.0 if j.month == 1 else 10.0)
+        (annee,) = indicateurs.compter(valeurs, self.GEL)
+        assert annee.jours == 31
+        assert annee.mesures == 365
+
+    def test_le_seuil_haut_est_inclusif(self):
+        # « a atteint 30 °C » : la journée à 30,0 compte.
+        valeurs = _annee_de_valeurs(2001, lambda j: 30.0 if j.month == 7 else 5.0)
+        (annee,) = indicateurs.compter(valeurs, self.CHALEUR)
+        assert annee.jours == 31
+
+    def test_une_annee_lacunaire_est_ecartee_et_non_extrapolee(self):
+        # Sans ce garde-fou, une demi-année dessinerait une fausse accalmie.
+        valeurs = {d: -5.0 for d in _annee_de_valeurs(2001, -5.0) if d.month <= 6}
+        assert indicateurs.compter(valeurs, self.GEL) == []
+
+    def test_les_annees_sortent_dans_l_ordre(self):
+        valeurs = _annee_de_valeurs(2002, -1.0) | _annee_de_valeurs(2001, -1.0)
+        assert [a.annee for a in indicateurs.compter(valeurs, self.GEL)] == [2001, 2002]
+
+
+class TestSaisonSansGel:
+    def _annee_avec_gels(self, annee, dernier, premier):
+        return {
+            d: (-1.0 if d.timetuple().tm_yday in (dernier, premier) else 10.0)
+            for d in _annee_de_valeurs(annee, 0.0)
+        }
+
+    def test_les_deux_bornes_et_la_duree(self):
+        (saison,) = indicateurs.saisons_sans_gel(self._annee_avec_gels(2001, 100, 300))
+        assert saison.dernier_gel == 100
+        assert saison.premier_gel == 300
+        assert saison.duree == 200
+
+    def test_seul_le_dernier_gel_de_printemps_compte(self):
+        valeurs = self._annee_avec_gels(2001, 100, 300)
+        valeurs[date(2001, 1, 15)] = -3.0
+        (saison,) = indicateurs.saisons_sans_gel(valeurs)
+        assert saison.dernier_gel == 100
+
+    def test_une_annee_sans_gel_d_automne_est_omise(self):
+        # Sa saison déborde de l'année civile : la borner au 31 décembre inventerait
+        # une date que la mesure ne donne pas.
+        valeurs = self._annee_avec_gels(2001, 100, 300)
+        valeurs[date(2001, 10, 27)] = 10.0
+        assert indicateurs.saisons_sans_gel(valeurs) == []
+
+
+class TestRecords:
+    def _serie(self, valeurs_par_annee):
+        serie = {}
+        for annee, valeur in valeurs_par_annee.items():
+            serie.update(_annee_de_valeurs(annee, valeur))
+        return serie
+
+    def test_le_record_de_chaleur_revient_a_l_annee_la_plus_chaude(self):
+        serie = self._serie({2001: 10.0, 2002: 30.0, 2003: 20.0})
+        tenus = indicateurs.records(serie, au_plus_haut=True)
+        assert len(tenus) == 365
+        assert {r.annee for r in tenus} == {2002}
+
+    def test_le_record_de_froid_revient_a_l_annee_la_plus_froide(self):
+        serie = self._serie({2001: 10.0, 2002: 30.0, 2003: 20.0})
+        assert {r.annee for r in indicateurs.records(serie, au_plus_haut=False)} == {2001}
+
+    def test_un_climat_stable_donne_un_indice_proche_de_un(self):
+        # Vingt années identiques : chacune détient le record d'autant de jours que
+        # l'ordre de parcours le veut, mais chaque décennie reste à sa part.
+        serie = self._serie({a: 10.0 + (a % 7) for a in range(2001, 2021)})
+        tenus = indicateurs.records(serie, au_plus_haut=True)
+        parts = indicateurs.parts_par_decennie(serie, tenus)
+        assert sum(p.attendus for p in parts) == pytest.approx(len(tenus))
+        assert sum(p.records for p in parts) == len(tenus)
+
+    # Années volontairement non bissextiles : le 29 février ne concourt qu'avec les
+    # autres 29 février, ce qui est correct mais brouillerait l'arithmétique du test.
+    ANCIENNES = (2001, 2002, 2003)
+    RECENTES = (2011, 2013)
+
+    def test_une_decennie_qui_rafle_tout_depasse_sa_bande_de_bruit(self):
+        serie = self._serie(
+            dict.fromkeys(self.ANCIENNES, 10.0) | dict.fromkeys(self.RECENTES, 40.0)
+        )
+        parts = indicateurs.parts_par_decennie(serie, indicateurs.records(serie, True))
+        par_decennie = {p.decennie: p for p in parts}
+        # Deux années sur cinq détiennent la totalité des records : 1 / (2/5) = 2,5.
+        assert par_decennie[2010].indice == pytest.approx(2.5)
+        assert par_decennie[2010].remarquable
+        assert par_decennie[2000].indice == pytest.approx(0.0)
+        assert par_decennie[2000].remarquable
+
+    def test_une_decennie_partielle_n_est_pas_penalisee(self):
+        # Deux années dans la seconde décennie contre trois dans la première :
+        # l'attente doit suivre, sinon la décennie courte paraîtrait toujours pauvre.
+        serie = self._serie(dict.fromkeys(self.ANCIENNES + self.RECENTES, 10.0))
+        parts = {p.decennie: p for p in indicateurs.parts_par_decennie(serie, [])}
+        assert parts[2000].attendus == pytest.approx(365 * 3 / 5)
+        assert parts[2010].attendus == pytest.approx(365 * 2 / 5)

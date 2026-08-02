@@ -17,6 +17,20 @@ KM_PAR_100M_DENIVELE = 10.0
 COUT_MAXIMAL_KM = 25.0
 """Au-delà, aucune Station n'est jugée comparable et rien n'est rattaché."""
 
+COUT_MAXIMAL_CLIMAT_KM = 60.0
+"""Plafond desserré pour le rattachement à un Poste climatologique.
+
+Ce n'est pas un relâchement de la rigueur mais un changement de grandeur mesurée. Une
+Observation sert à juger une Prévision : il faut alors qu'elle vaille pour le lieu, au
+degré près, et 800 m de dénivelé la disqualifient. Une Série longue sert à montrer une
+évolution : le réchauffement est cohérent à l'échelle d'une région, là où la température
+absolue ne l'est pas. Le fond de vallée et l'alpage ne sont pas au même niveau, ils
+montent ensemble.
+
+La contrepartie est d'affichage, et elle est obligatoire : le Poste retenu doit toujours
+être nommé avec son altitude et son écart au lieu, faute de quoi le lecteur croirait
+lire la mémoire de son jardin."""
+
 
 @dataclass(frozen=True)
 class Candidate:
