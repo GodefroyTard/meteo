@@ -3,7 +3,7 @@ from datetime import date, timedelta
 import numpy as np
 import pytest
 
-from meteo.domaine import cycle, indicateurs, qualite, secheresse, tendance
+from meteo.domaine import cycle, indicateurs, neige, qualite, secheresse, tendance
 from meteo.domaine.conditions import (
     CRANS_AIR,
     CRANS_UV,
@@ -810,3 +810,66 @@ class TestFrequences:
         assert par_decennie[2000].seches == 0
         assert par_decennie[2010].annees == 2
         assert par_decennie[2010].part == pytest.approx(1.0)
+
+
+# --- Neige : l'enneigement, saison après saison.
+
+
+class TestSaisonNeige:
+    def test_la_saison_va_d_aout_a_juillet(self):
+        # L'hiver 1962-1963 est « la saison 1962 » : la caler sur l'année civile
+        # couperait chaque hiver en son milieu.
+        assert neige.saison_de(date(1962, 8, 1)) == 1962
+        assert neige.saison_de(date(1962, 12, 31)) == 1962
+        assert neige.saison_de(date(1963, 1, 15)) == 1962
+        assert neige.saison_de(date(1963, 7, 31)) == 1962
+        assert neige.saison_de(date(1963, 8, 1)) == 1963
+
+    def test_le_rang_se_compte_depuis_le_1er_aout(self):
+        assert neige.rang_dans_saison(date(1962, 8, 1), 1962) == 0
+        assert neige.rang_dans_saison(date(1963, 1, 1), 1962) == 153
+
+
+def _saison_mesuree(millesime, hauteurs_par_jour=None):
+    """Une saison complète mesurée, à zéro sauf aux jours indiqués."""
+    jour, valeurs = date(millesime, 8, 1), {}
+    while jour < date(millesime + 1, 8, 1):
+        valeurs[jour] = 0.0
+        jour += timedelta(days=1)
+    valeurs.update(hauteurs_par_jour or {})
+    return valeurs
+
+
+class TestSaisonsNeige:
+    def test_compte_les_jours_au_sol_et_le_maximum(self):
+        hauteurs = _saison_mesuree(1962, {
+            date(1962, 12, 20): 15.0,
+            date(1962, 12, 21): 40.0,
+            date(1963, 3, 10): 5.0,
+        })
+        (s,) = neige.saisons(hauteurs)
+        assert s.saison == 1962
+        assert s.libelle == "1962-1963"
+        assert s.jours_au_sol == 3
+        assert s.epaisseur_max_cm == 40.0
+        assert s.premiere == date(1962, 12, 20)
+        assert s.derniere == date(1963, 3, 10)
+
+    def test_une_saison_sans_neige_est_conservee_a_zero(self):
+        # L'omettre gonflerait la moyenne des saisons restantes.
+        (s,) = neige.saisons(_saison_mesuree(1962))
+        assert s.jours_au_sol == 0
+        assert not s.enneigee
+        assert s.premiere is None
+
+    def test_une_saison_trop_lacunaire_est_ecartee(self):
+        # Un hiver relevé à moitié compterait mécaniquement moins de jours et
+        # dessinerait un recul là où il n'y a qu'un trou dans le relevé.
+        partielle = {j: v for j, v in _saison_mesuree(1962).items() if j.month in (12, 1, 2)}
+        assert neige.saisons(partielle) == []
+
+    def test_le_cumul_de_neige_fraiche_suit_la_saison(self):
+        hauteurs = _saison_mesuree(1962, {date(1963, 1, 5): 20.0})
+        fraiches = {date(1962, 12, 30): 12.0, date(1963, 1, 5): 20.0, date(1963, 9, 1): 99.0}
+        (s,) = neige.saisons(hauteurs, fraiches)
+        assert s.fraiche_cm == pytest.approx(32.0), "septembre suivant appartient à 1963"
